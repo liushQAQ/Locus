@@ -77,7 +77,6 @@ struct MapHomeView: View {
                     drawMode = false
                 }
             )
-            .presentationDetents([.medium, .large])
         }
     }
 
