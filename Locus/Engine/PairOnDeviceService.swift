@@ -190,7 +190,14 @@ final class PairOnDeviceService: ObservableObject {
         let model = "Mac17,7"
 
         var outFile: OpaquePointer?
+        var peerDevice: UnsafeMutablePointer<RpPairingPeerDeviceC>?
         var altIRK = [UInt8](repeating: 0, count: 16)
+
+        // New API: the Rust host listens AND advertises the
+        // `_remotepairing-pairable-host._tcp` Bonjour service itself; Swift
+        // only displays the PIN and may cancel via the token.
+        let cancelToken = pairable_host_cancel_new()
+        defer { if let cancelToken { pairable_host_cancel_free(cancelToken) } }
 
         let err: UnsafeMutablePointer<IdeviceFfiError>? = name.withCString { namePtr in
             model.withCString { modelPtr in
@@ -198,17 +205,16 @@ final class PairOnDeviceService: ObservableObject {
                     namePtr,
                     modelPtr,
                     0,
-                    pinDisplayTrampoline,
+                    pinCallbackTrampoline,
                     Unmanaged.passUnretained(box).toOpaque(),
-                    listeningTrampoline,
-                    Unmanaged.passUnretained(box).toOpaque(),
-                    connectedTrampoline,
-                    Unmanaged.passUnretained(box).toOpaque(),
+                    cancelToken,
                     &altIRK,
+                    &peerDevice,
                     &outFile
                 )
             }
         }
+        if let peerDevice { rppairing_peer_device_free(peerDevice) }
 
         if let err {
             let message: String
@@ -282,50 +288,10 @@ final class PairCallbackBox: @unchecked Sendable {
     weak var owner: PairOnDeviceService?
 }
 
-private func pinDisplayTrampoline(pin: UnsafePointer<CChar>?, context: UnsafeMutableRawPointer?) {
+/// C trampoline for `pairable_host_accept`'s single PIN callback.
+private func pinCallbackTrampoline(_ pin: UnsafePointer<CChar>?, _ context: UnsafeMutableRawPointer?) {
     guard let pin, let context else { return }
     let value = String(cString: pin)
     let box = Unmanaged<PairCallbackBox>.fromOpaque(context).takeUnretainedValue()
     DispatchQueue.main.async { box.owner?.handlePIN(value) }
-}
-
-private func listeningTrampoline(
-    port: UInt16,
-    serviceIdentifier: UnsafePointer<CChar>?,
-    name: UnsafePointer<CChar>?,
-    model: UnsafePointer<CChar>?,
-    authTag: UnsafePointer<CChar>?,
-    ver: UnsafePointer<CChar>?,
-    minVer: UnsafePointer<CChar>?,
-    context: UnsafeMutableRawPointer?
-) {
-    guard let context else { return }
-    let box = Unmanaged<PairCallbackBox>.fromOpaque(context).takeUnretainedValue()
-    let values = (
-        port,
-        serviceIdentifier.map { String(cString: $0) } ?? "",
-        name.map { String(cString: $0) } ?? "Locus",
-        model.map { String(cString: $0) } ?? "Mac17,7",
-        authTag.map { String(cString: $0) } ?? "",
-        ver.map { String(cString: $0) } ?? "26",
-        minVer.map { String(cString: $0) } ?? "17"
-    )
-    // NetService must be touched on the main thread / runloop.
-    DispatchQueue.main.async {
-        box.owner?.handleListening(
-            port: values.0,
-            serviceIdentifier: values.1,
-            name: values.2,
-            model: values.3,
-            authTag: values.4,
-            ver: values.5,
-            minVer: values.6
-        )
-    }
-}
-
-private func connectedTrampoline(context: UnsafeMutableRawPointer?) {
-    guard let context else { return }
-    let box = Unmanaged<PairCallbackBox>.fromOpaque(context).takeUnretainedValue()
-    DispatchQueue.main.async { box.owner?.handleConnected() }
 }

@@ -339,16 +339,18 @@ enum DDIMounter {
         }
         guard let connection else { return nil }
 
-        var devices: UnsafeMutablePointer<UnsafeMutablePointer<OpaquePointer>?>?
+        var devices: UnsafeMutablePointer<OpaquePointer?>?
         var count: Int32 = 0
         if let err = idevice_usbmuxd_get_devices(connection, &devices, &count) {
             idevice_error_free(err)
             return nil
         }
-        guard let devices, count > 0, let list = devices.pointee, let first = list.pointee else {
-            if let list = devices?.pointee {
-                idevice_usbmuxd_device_list_free(list, count)
-            }
+        guard let devices, count > 0, let basePtr = devices.pointee else {
+            return nil
+        }
+        let list = UnsafeMutablePointer<OpaquePointer?>(basePtr)
+        guard let list, let first = list.pointee else {
+            idevice_usbmuxd_device_list_free(list, count)
             return nil
         }
         let deviceID = idevice_usbmuxd_device_get_device_id(first)

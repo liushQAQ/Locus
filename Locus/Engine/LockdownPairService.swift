@@ -39,27 +39,20 @@ enum LockdownPairService {
     static let lockdownPort: UInt16 = 62078
 
     static func pair() -> Result<Data, PairError> {
-        switch lockdownConnection() {
-        case .failure(let error):
-            return .failure(error)
-        case .success(let connection):
-            return pair(using: connection)
+        // Preferred: usbmuxd unix socket — unsandboxed installs (e.g.
+        // TrollStore, which keeps the no-sandbox entitlement) reach the local
+        // muxer directly.
+        if case .success(let data) = pairViaUsbmuxd() {
+            return .success(data)
         }
+        return pairViaLoopbackTCP()
     }
 
     // MARK: - Connection
 
-    /// Returns a lockdownd client over whichever local transport answers.
-    private static func lockdownConnection() -> Result<OpaquePointer, PairError> {
-        if case .success(let client) = lockdownViaUsbmuxd() {
-            return .success(client)
-        }
-        return lockdownViaLoopbackTCP()
-    }
-
     /// usbmuxd unix socket path: enumerate the local device, connect to its
     /// lockdown port through the muxer.
-    private static func lockdownViaUsbmuxd() -> Result<OpaquePointer, PairError> {
+    private static func pairViaUsbmuxd() -> Result<Data, PairError> {
         var connection: OpaquePointer?
         let connectError = "/var/run/usbmuxd".withCString {
             idevice_usbmuxd_new_unix_socket_connection($0, 1, &connection)
@@ -72,16 +65,18 @@ enum LockdownPairService {
             return .failure(.tunnelUnreachable("usbmuxd 连接建立失败"))
         }
 
-        var devices: UnsafeMutablePointer<UnsafeMutablePointer<OpaquePointer>?>?
+        var devices: UnsafeMutablePointer<OpaquePointer?>?
         var count: Int32 = 0
         if let listError = idevice_usbmuxd_get_devices(connection, &devices, &count) {
             idevice_error_free(listError)
             return .failure(.tunnelUnreachable("usbmuxd 未枚举到本机设备"))
         }
-        guard let devices, count > 0, let list = devices.pointee, let first = list.pointee else {
-            if let list = devices?.pointee {
-                idevice_usbmuxd_device_list_free(list, count)
-            }
+        guard let devices, count > 0, let basePtr = devices.pointee else {
+            return .failure(.tunnelUnreachable("usbmuxd 设备列表为空"))
+        }
+        let list = UnsafeMutablePointer<OpaquePointer?>(basePtr)
+        guard let list, let first = list.pointee else {
+            idevice_usbmuxd_device_list_free(list, count)
             return .failure(.tunnelUnreachable("usbmuxd 设备列表为空"))
         }
         let deviceID = idevice_usbmuxd_device_get_device_id(first)
@@ -110,6 +105,9 @@ enum LockdownPairService {
             idevice_free(socket)
             return .failure(.tunnelUnreachable("lockdownd 会话初始化失败"))
         }
+        guard let client else {
+            return .failure(.tunnelUnreachable("lockdownd 客户端创建失败"))
+        }
         defer { if let client { lockdownd_client_free(client) } }
 
         // Best effort: also stash the (about-to-be-created) record in usbmuxd's
@@ -124,7 +122,7 @@ enum LockdownPairService {
 
     /// Plain loopback TCP: lockdownd listens on 62078 and speaks the same
     /// protocol iTunes Wi-Fi sync used over the network.
-    private static func lockdownViaLoopbackTCP() -> Result<OpaquePointer, PairError> {
+    private static func pairViaLoopbackTCP() -> Result<Data, PairError> {
         var address = sockaddr_in()
         address.sin_family = sa_family_t(AF_INET)
         address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
@@ -151,12 +149,15 @@ enum LockdownPairService {
             idevice_free(socket)
             return .failure(.tunnelUnreachable("lockdownd 会话初始化失败"))
         }
+        guard let client else {
+            return .failure(.tunnelUnreachable("lockdownd 客户端创建失败"))
+        }
         defer { if let client { lockdownd_client_free(client) } }
 
         guard let record = pairOver(client: client) else {
             return .failure(.lockdown("本机配对未完成：请解锁手机，弹出“信任此电脑？”时点“信任”后重试。"))
         }
-        return .success(serialize(record))
+        return .success(record)
     }
 
     // MARK: - Pair handshake
