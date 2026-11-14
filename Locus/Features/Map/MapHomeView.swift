@@ -144,11 +144,11 @@ struct MapHomeView: View {
             Image(systemName: resume.mode.icon)
                 .foregroundStyle(LocusTheme.accent)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Route interrupted")
+                Text("路线中断")
                     .font(.subheadline.weight(.semibold))
                 Text(
                     String(
-                        format: "%.0f%% done · %@",
+                        format: "已走 %.0f%% · %@",
                         resume.traveledFraction * 100,
                         resume.updatedAt.formatted(date: .omitted, time: .shortened)
                     )
@@ -157,7 +157,7 @@ struct MapHomeView: View {
                 .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            Button("Resume") {
+            Button("继续") {
                 session.resumeRoute(pairing: pairing)
             }
             .font(.subheadline.weight(.semibold))
@@ -179,7 +179,7 @@ struct MapHomeView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Search places", text: $searchText)
+            TextField("搜索地点", text: $searchText)
                 .textInputAutocapitalization(.words)
                 .focused($searchFocused)
                 .submitLabel(.search)
@@ -199,10 +199,10 @@ struct MapHomeView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear and dismiss keyboard")
+                .accessibilityLabel("清除并收起键盘")
             }
             if searchFocused {
-                Button("Done") {
+                Button("完成") {
                     searchFocused = false
                 }
                 .font(.subheadline.weight(.semibold))
@@ -282,7 +282,7 @@ struct MapHomeView: View {
         .locusGlass(.interactive, in: Circle())
         .foregroundStyle(.primary)
         .contentShape(Circle())
-        .accessibilityLabel("Current location")
+        .accessibilityLabel("当前位置")
     }
 
     // MARK: - Camera commands
@@ -342,7 +342,7 @@ struct MapHomeView: View {
     private func buildRoadRoute() {
         guard let start = routeStart ?? session.simulated ?? session.pin,
               let end = routeEnd else {
-            session.lastError = "Set a route start and end."
+            session.lastError = "请先设置路线起点和终点。"
             return
         }
         isRouting = true
@@ -365,7 +365,7 @@ struct MapHomeView: View {
     private func playRoute() {
         let path = routeCoords.isEmpty ? drawnPath : routeCoords
         guard path.count >= 2 else {
-            session.lastError = "Build or draw a route first."
+            session.lastError = "请先规划或手绘一条路线。"
             return
         }
         showRouteSheet = false
@@ -388,7 +388,7 @@ struct MapHomeView: View {
     private func exportGPX() {
         let path = routeCoords.isEmpty ? drawnPath : routeCoords
         guard !path.isEmpty else {
-            session.lastError = "Nothing to export."
+            session.lastError = "没有可导出的路线。"
             return
         }
         let gpx = GPXCodec.export(path)
