@@ -39,6 +39,15 @@ enum LocationEngineError: LocalizedError {
         }
     }
 
+    /// Failure shape typical of an unmounted Developer Disk Image / dead
+    /// lockdown session — drives the auto-remount retry in SpoofSession.
+    var isLockdownChannelFailure: Bool {
+        switch self {
+        case .lockdownConnect, .lockdownSet: return true
+        default: return false
+        }
+    }
+
     static func from(code: Int32) -> LocationEngineError {
         switch code {
         case 1: return .invalidIP

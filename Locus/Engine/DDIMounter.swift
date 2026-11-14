@@ -111,25 +111,10 @@ enum DDIMounter {
         imageURL: URL,
         signatureURL: URL
     ) -> Result<Void, MountError> {
-        // Already mounted → nothing to do. (LookupImage returns the signature
-        // of a mounted/known image; an error means "not mounted" — fall through
-        // to upload+mount, the device reports "already mounted" itself if so.)
-        var signature: UnsafeMutablePointer<UInt8>?
-        var signatureLen: UInt = 0
-        let lookupResult = imageType.withCString {
-            image_mounter_lookup_image(mounter, $0, &signature, &signatureLen)
-        }
-        if let lookupErr = lookupResult {
-            idevice_error_free(lookupErr)
-        } else {
-            if let signature {
-                idevice_data_free(signature, UInt(signatureLen))
-            }
-            return .success(())
-        }
-        if let signature {
-            idevice_data_free(signature, UInt(signatureLen))
-        }
+        // No LookupImage short-circuit: on iOS ≤16 LookupImage also matches
+        // images cached on disk but NOT mounted (i.e. right after a reboot),
+        // which would report a false "already mounted". Always upload+mount —
+        // the device answers "already mounted" and that counts as success.
 
         // Developer mode gate (iOS 16 reports it; jailbroken devices usually pass).
         var devMode: Int32 = 0
@@ -349,7 +334,7 @@ enum DDIMounter {
             return nil
         }
         let list = UnsafeMutablePointer<OpaquePointer?>(basePtr)
-        guard let list, let first = list.pointee else {
+        guard let first = list.pointee else {
             idevice_usbmuxd_device_list_free(list, count)
             return nil
         }

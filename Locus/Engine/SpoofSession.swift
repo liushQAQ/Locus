@@ -126,6 +126,7 @@ final class SpoofSession: ObservableObject {
     private var backgroundTask = UIBackgroundTaskIdentifier.invalid
     private var joystickVector: CGVector = .zero
     private let locationKeeper = BackgroundKeepAlive()
+    private var lastAutoMountAttempt: Date?
 
     private let favoritesKey = "locus.favorites"
     private let recentsKey = "locus.recents"
@@ -480,11 +481,34 @@ final class SpoofSession: ObservableObject {
             }
         case .failure(let error):
             lastError = error.localizedDescription
+            if error.isLockdownChannelFailure {
+                autoMountThenApply(coordinate: coordinate, pairing: pairing, markRecent: markRecent)
+            }
             if simulated != nil {
                 status = .dropped(error.localizedDescription)
                 postDropNotification(error.localizedDescription)
             } else {
                 status = .idle
+            }
+        }
+    }
+
+    /// iOS ≤16: a reboot unmounts the Developer Disk Image, which surfaces as
+    /// a lockdown connect/set failure. Remount on a worker thread (the first
+    /// attempt may download the ~8 MB image) and re-apply; a cooldown keeps
+    /// this bounded when the mount itself keeps failing.
+    private func autoMountThenApply(coordinate: CLLocationCoordinate2D, pairing: PairingStore, markRecent: Bool) {
+        if let last = lastAutoMountAttempt, Date().timeIntervalSince(last) < 30 { return }
+        lastAutoMountAttempt = Date()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = DDIMounter.mount()
+            Task { @MainActor in
+                switch result {
+                case .success:
+                    self.apply(coordinate, pairing: pairing, markRecent: markRecent)
+                case .failure(let mountError):
+                    self.lastError = "自动挂载开发者镜像失败：\(mountError.localizedDescription)"
+                }
             }
         }
     }

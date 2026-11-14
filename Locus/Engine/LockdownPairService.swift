@@ -75,7 +75,7 @@ enum LockdownPairService {
             return .failure(.tunnelUnreachable("usbmuxd 设备列表为空"))
         }
         let list = UnsafeMutablePointer<OpaquePointer?>(basePtr)
-        guard let list, let first = list.pointee else {
+        guard let first = list.pointee else {
             idevice_usbmuxd_device_list_free(list, count)
             return .failure(.tunnelUnreachable("usbmuxd 设备列表为空"))
         }
@@ -108,7 +108,7 @@ enum LockdownPairService {
         guard let client else {
             return .failure(.tunnelUnreachable("lockdownd 客户端创建失败"))
         }
-        defer { if let client { lockdownd_client_free(client) } }
+        defer { lockdownd_client_free(client) }
 
         // Best effort: also stash the (about-to-be-created) record in usbmuxd's
         // own store so provider-based transports pick it up later. Needs a
@@ -152,7 +152,7 @@ enum LockdownPairService {
         guard let client else {
             return .failure(.tunnelUnreachable("lockdownd 客户端创建失败"))
         }
-        defer { if let client { lockdownd_client_free(client) } }
+        defer { lockdownd_client_free(client) }
 
         guard let record = pairOver(client: client) else {
             return .failure(.lockdown("本机配对未完成：请解锁手机，弹出“信任此电脑？”时点“信任”后重试。"))
