@@ -24,7 +24,7 @@ struct LockdownPairingView: View {
                     } else {
                         Image(systemName: "iphone.and.arrow.forward")
                     }
-                    Text("Pair on this iPhone")
+                    Text("在本机配对")
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity)
                 }
@@ -37,14 +37,14 @@ struct LockdownPairingView: View {
             .disabled(pairer.phase == .working)
 
             if case .working = pairer.phase {
-                Text("Connecting… Keep this iPhone unlocked. When the “Trust This Computer?” popup appears, tap Trust.")
+                Text("连接中…请保持这台 iPhone 解锁。出现“信任此电脑？”弹窗时，点“信任”。")
                     .font(.footnote)
                     .foregroundStyle(LocusTheme.statusWarn)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if case .succeeded = pairer.phase {
-                Text("Paired. The lockdown pairing record is saved.")
+                Text("配对成功，lockdown 配对记录已保存。")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(LocusTheme.statusGood)
             }
@@ -57,9 +57,9 @@ struct LockdownPairingView: View {
             }
 
             HStack(spacing: 10) {
-                Button("Import record…") { showImporter = true }
+                Button("导入记录…") { showImporter = true }
                     .font(.subheadline.weight(.semibold))
-                Button("Paste") {
+                Button("粘贴") {
                     do {
                         try pairing.importLockdownPairingFromClipboard()
                     } catch {
@@ -68,7 +68,7 @@ struct LockdownPairingView: View {
                 }
                 .font(.subheadline.weight(.semibold))
                 if pairing.hasLockdownPairing {
-                    Button("Remove", role: .destructive) {
+                    Button("移除", role: .destructive) {
                         try? pairing.removeLockdownPairing()
                     }
                     .font(.subheadline)
@@ -81,7 +81,7 @@ struct LockdownPairingView: View {
 
     private var statusRow: some View {
         Label {
-            Text(pairing.hasLockdownPairing ? "Lockdown pairing installed" : "No lockdown pairing")
+            Text(pairing.hasLockdownPairing ? "lockdown 配对已就绪" : "尚无 lockdown 配对")
         } icon: {
             Image(systemName: pairing.hasLockdownPairing ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                 .foregroundStyle(pairing.hasLockdownPairing ? LocusTheme.statusGood : LocusTheme.statusWarn)
@@ -91,9 +91,9 @@ struct LockdownPairingView: View {
 
     private var stepsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepRow(1, "Tap “Pair on this iPhone” while this iPhone is unlocked, then tap Trust in the popup.")
-            stepRow(2, "Already paired on a computer? Export the record with pymobiledevice3 (it lives in ~/.pymobiledevice3/pairing_records) and Import it here.")
-            stepRow(3, "After every reboot, mount the Developer Disk Image once from a computer: pymobiledevice3 developer ddi mount")
+            stepRow(1, "解锁手机后点“在本机配对”，弹窗出现时点“信任”。")
+            stepRow(2, "已在电脑上配对过？用 pymobiledevice3 导出配对记录（在 ~/.pymobiledevice3/pairing_records 目录），传到手机后在这里导入。")
+            stepRow(3, "手机每次重启后，都要用电脑挂载一次开发者磁盘镜像：pymobiledevice3 developer ddi mount")
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
