@@ -522,7 +522,7 @@ private struct LegacyMapView: UIViewRepresentable {
     var onPinPlaced: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
+        Coordinator()
     }
 
     func makeUIView(context: Context) -> MKMapView {
@@ -747,8 +747,17 @@ private struct LegacyMapView: UIViewRepresentable {
 
         // MARK: Overlays
 
+        /// CLLocationCoordinate2D isn't Equatable — compare elementwise.
+        func sameCoords(_ a: [CLLocationCoordinate2D], _ b: [CLLocationCoordinate2D]) -> Bool {
+            guard a.count == b.count else { return false }
+            for (x, y) in zip(a, b) where x.latitude != y.latitude || x.longitude != y.longitude {
+                return false
+            }
+            return true
+        }
+
         func syncOverlays(map: MKMapView, routeCoords: [CLLocationCoordinate2D], drawnPath: [CLLocationCoordinate2D]) {
-            if routeCoords != lastRouteCoords {
+            if !sameCoords(routeCoords, lastRouteCoords) {
                 if let routeOverlay {
                     map.removeOverlay(routeOverlay)
                     self.routeOverlay = nil
@@ -760,7 +769,7 @@ private struct LegacyMapView: UIViewRepresentable {
                 }
                 lastRouteCoords = routeCoords
             }
-            if drawnPath != lastDrawnCoords {
+            if !sameCoords(drawnPath, lastDrawnCoords) {
                 if let drawnOverlay {
                     map.removeOverlay(drawnOverlay)
                     self.drawnOverlay = nil
