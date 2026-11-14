@@ -124,6 +124,10 @@ struct MapHomeView: View {
                 searchResults
             }
 
+            if let resume = session.resumableRoute {
+                routeResumeBanner(resume)
+            }
+
             HStack(alignment: .center, spacing: 10) {
                 mapChromeButtons
                 Spacer(minLength: 0)
@@ -132,6 +136,43 @@ struct MapHomeView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 2)
+    }
+
+    /// Shown after a relaunch when a route simulation was interrupted mid-way.
+    private func routeResumeBanner(_ resume: ResumableRoute) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: resume.mode.icon)
+                .foregroundStyle(LocusTheme.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Route interrupted")
+                    .font(.subheadline.weight(.semibold))
+                Text(
+                    String(
+                        format: "%.0f%% done · %@",
+                        resume.traveledFraction * 100,
+                        resume.updatedAt.formatted(date: .omitted, time: .shortened)
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Button("Resume") {
+                session.resumeRoute(pairing: pairing)
+            }
+            .font(.subheadline.weight(.semibold))
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            Button {
+                session.discardResumableRoute()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(12)
+        .locusGlass(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var searchBar: some View {

@@ -68,6 +68,42 @@ enum SpoofStatus: Equatable {
     }
 }
 
+/// Persisted snapshot of an in-flight route so a killed app can resume it.
+struct RouteProgressSnapshot: Codable {
+    var lats: [Double]
+    var lons: [Double]
+    var modeRaw: String
+    var index: Int
+    var lastLat: Double
+    var lastLon: Double
+    var updatedAt: Date
+}
+
+/// A route the app was stepping along before it was interrupted; offered for
+/// resume after a relaunch.
+struct ResumableRoute: Identifiable {
+    let id = UUID()
+    let coordinates: [CLLocationCoordinate2D]
+    let mode: TravelMode
+    let index: Int
+    let lastCoordinate: CLLocationCoordinate2D
+    let updatedAt: Date
+
+    var traveledFraction: Double {
+        guard coordinates.count > 1 else { return 0 }
+        return Double(min(index, coordinates.count - 1)) / Double(coordinates.count - 1)
+    }
+}
+
+/// In-memory state of the route currently being stepped.
+private struct RouteRunState {
+    var coordinates: [CLLocationCoordinate2D]
+    var mode: TravelMode
+    var index: Int
+    var lastCoordinate: CLLocationCoordinate2D
+    var lastPersist: Date
+}
+
 @MainActor
 final class SpoofSession: ObservableObject {
     @Published var status: SpoofStatus = .idle
@@ -78,6 +114,7 @@ final class SpoofSession: ObservableObject {
     @Published var lastError: String?
     @Published var isBusy = false
     @Published var joystickActive = false
+    @Published var resumableRoute: ResumableRoute?
 
     @Published var favorites: [SavedPlace] = []
     @Published var recents: [SavedPlace] = []
@@ -93,9 +130,15 @@ final class SpoofSession: ObservableObject {
     private let favoritesKey = "locus.favorites"
     private let recentsKey = "locus.recents"
 
+    private static let routeProgressKey = "locus.routeProgress"
+    private static let routeProgressMaxAge: TimeInterval = 24 * 3600
+    private var routeRun: RouteRunState?
+    private var routeRunGeneration = 0
+
     init() {
         favorites = SavedPlace.load(key: favoritesKey)
         recents = SavedPlace.load(key: recentsKey)
+        restoreRouteProgress()
     }
 
     var isSpoofing: Bool {
@@ -124,6 +167,9 @@ final class SpoofSession: ObservableObject {
     func stop(pairing: PairingStore) {
         routeTask?.cancel()
         routeTask = nil
+        routeRun = nil
+        resumableRoute = nil
+        Self.clearRouteProgress()
         stopJoystick()
         stopResend()
         stopHealth()
@@ -189,18 +235,61 @@ final class SpoofSession: ObservableObject {
     }
 
     func followRoute(_ coordinates: [CLLocationCoordinate2D], pairing: PairingStore) {
-        guard pairing.hasPairingFile, coordinates.count >= 2 else { return }
+        guard pairing.hasUsablePairing, coordinates.count >= 2 else { return }
+        resumableRoute = nil
+        beginRouteRun(coordinates: coordinates, fromIndex: 0, resumePoint: nil, mode: travelMode, pairing: pairing)
+    }
+
+    /// Continues a preserved route from the point where the app was interrupted.
+    func resumeRoute(pairing: PairingStore) {
+        guard let resume = resumableRoute, pairing.hasUsablePairing else { return }
+        resumableRoute = nil
+        beginRouteRun(
+            coordinates: resume.coordinates,
+            fromIndex: resume.index,
+            resumePoint: resume.lastCoordinate,
+            mode: resume.mode,
+            pairing: pairing
+        )
+    }
+
+    func discardResumableRoute() {
+        resumableRoute = nil
+        Self.clearRouteProgress()
+    }
+
+    private func beginRouteRun(
+        coordinates: [CLLocationCoordinate2D],
+        fromIndex: Int,
+        resumePoint: CLLocationCoordinate2D?,
+        mode: TravelMode,
+        pairing: PairingStore
+    ) {
         routeTask?.cancel()
         stopJoystick()
-        let mode = travelMode
+        let startIndex = max(0, min(fromIndex, coordinates.count - 1))
+        let startCoordinate = resumePoint ?? coordinates[startIndex]
+        let rest = Array(coordinates[(startIndex + 1)...])
+        routeRunGeneration += 1
+        let generation = routeRunGeneration
+        routeRun = RouteRunState(
+            coordinates: coordinates,
+            mode: mode,
+            index: startIndex,
+            lastCoordinate: startCoordinate,
+            lastPersist: .distantPast
+        )
+        persistRouteProgress()
         routeTask = Task { [weak self] in
             guard let self else { return }
-            var previous = coordinates[0]
+            var previous = startCoordinate
+            var nextVertexIndex = startIndex
             await MainActor.run {
-                self.apply(previous, pairing: pairing, markRecent: true)
+                self.apply(previous, pairing: pairing, markRecent: startIndex == 0 && resumePoint == nil)
             }
-            for next in coordinates.dropFirst() {
+            for next in rest {
                 if Task.isCancelled { break }
+                nextVertexIndex += 1
                 let distance = CLLocation(latitude: previous.latitude, longitude: previous.longitude)
                     .distance(from: CLLocation(latitude: next.latitude, longitude: next.longitude))
                 var speed = mode.baseSpeed * Double.random(in: 0.88...1.12)
@@ -218,11 +307,79 @@ final class SpoofSession: ObservableObject {
                     try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                     await MainActor.run {
                         self.apply(coord, pairing: pairing, markRecent: false)
+                        self.noteRouteProgress(
+                            at: coord,
+                            vertexIndex: i == steps ? nextVertexIndex : nextVertexIndex - 1,
+                            isVertex: i == steps
+                        )
                     }
                 }
                 previous = next
             }
+            await MainActor.run {
+                self.finishRouteRun(generation: generation)
+            }
         }
+    }
+
+    private func noteRouteProgress(at coordinate: CLLocationCoordinate2D, vertexIndex: Int, isVertex: Bool) {
+        guard var run = routeRun else { return }
+        run.lastCoordinate = coordinate
+        if isVertex { run.index = vertexIndex }
+        let now = Date()
+        let due = now.timeIntervalSince(run.lastPersist) >= 5
+        if due { run.lastPersist = now }
+        routeRun = run
+        if due { persistRouteProgress() }
+    }
+
+    private func persistRouteProgress() {
+        guard let run = routeRun else { return }
+        let snapshot = RouteProgressSnapshot(
+            lats: run.coordinates.map(\.latitude),
+            lons: run.coordinates.map(\.longitude),
+            modeRaw: run.mode.rawValue,
+            index: run.index,
+            lastLat: run.lastCoordinate.latitude,
+            lastLon: run.lastCoordinate.longitude,
+            updatedAt: Date()
+        )
+        if let data = try? JSONEncoder().encode(snapshot) {
+            UserDefaults.standard.set(data, forKey: Self.routeProgressKey)
+        }
+    }
+
+    private func restoreRouteProgress() {
+        guard let data = UserDefaults.standard.data(forKey: Self.routeProgressKey),
+              let snap = try? JSONDecoder().decode(RouteProgressSnapshot.self, from: data),
+              snap.lats.count == snap.lons.count, snap.lats.count >= 2,
+              Date().timeIntervalSince(snap.updatedAt) < Self.routeProgressMaxAge
+        else {
+            Self.clearRouteProgress()
+            return
+        }
+        let coordinates = zip(snap.lats, snap.lons).map {
+            CLLocationCoordinate2D(latitude: $0, longitude: $1)
+        }
+        resumableRoute = ResumableRoute(
+            coordinates: coordinates,
+            mode: TravelMode(rawValue: snap.modeRaw) ?? .walk,
+            index: max(0, min(snap.index, coordinates.count - 1)),
+            lastCoordinate: CLLocationCoordinate2D(latitude: snap.lastLat, longitude: snap.lastLon),
+            updatedAt: snap.updatedAt
+        )
+    }
+
+    private static func clearRouteProgress() {
+        UserDefaults.standard.removeObject(forKey: routeProgressKey)
+    }
+
+    /// Clears run state when the route finished; stale tasks from a superseded
+    /// run are ignored via the generation counter.
+    private func finishRouteRun(generation: Int) {
+        guard generation == routeRunGeneration else { return }
+        routeRun = nil
+        Self.clearRouteProgress()
     }
 
     func addFavorite(name: String, coordinate: CLLocationCoordinate2D) {
