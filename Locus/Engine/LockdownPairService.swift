@@ -53,6 +53,13 @@ enum LockdownPairService {
     /// usbmuxd unix socket path: enumerate the local device, connect to its
     /// lockdown port through the muxer.
     private static func pairViaUsbmuxd() -> Result<Data, PairError> {
+        // Reachability probe BEFORE entering the FFI layer: a sandboxed
+        // install gets a graceful hint instead of a kernel denial deep inside
+        // the library.
+        guard UsbmuxdPreflight.isReachable() else {
+            return .failure(.tunnelUnreachable("本机 usbmuxd 不可达（沙盒限制）。请用 TrollStore 安装本应用后重试。"))
+        }
+
         var connection: OpaquePointer?
         let connectError = "/var/run/usbmuxd".withCString {
             idevice_usbmuxd_new_unix_socket_connection($0, 1, &connection)
@@ -71,20 +78,22 @@ enum LockdownPairService {
             idevice_error_free(listError)
             return .failure(.tunnelUnreachable("usbmuxd 未枚举到本机设备"))
         }
-        guard let devices, count > 0, let basePtr = devices.pointee else {
+        guard let devices, count > 0 else {
             return .failure(.tunnelUnreachable("usbmuxd 设备列表为空"))
         }
-        let list = UnsafeMutablePointer<OpaquePointer?>(basePtr)
-        guard let first = list.pointee else {
-            idevice_usbmuxd_device_list_free(list, count)
+        // `devices` is the array of device handles itself (UsbmuxdDeviceHandle**
+        // per the FFI header). Element 0 IS the first handle — one more level
+        // of indirection dereferences garbage and kills the process.
+        guard let firstDevice = devices.pointee else {
+            idevice_usbmuxd_device_list_free(devices, count)
             return .failure(.tunnelUnreachable("usbmuxd 设备列表为空"))
         }
-        let deviceID = idevice_usbmuxd_device_get_device_id(first)
-        let udid = idevice_usbmuxd_device_get_udid(first).map { ptr -> String in
+        let deviceID = idevice_usbmuxd_device_get_device_id(firstDevice)
+        let udid = idevice_usbmuxd_device_get_udid(firstDevice).map { ptr -> String in
             defer { idevice_string_free(ptr) }
             return String(cString: ptr)
         } ?? ""
-        idevice_usbmuxd_device_list_free(list, count)
+        idevice_usbmuxd_device_list_free(devices, count)
 
         // connect_to_device consumes the muxer connection.
         var socket: OpaquePointer?

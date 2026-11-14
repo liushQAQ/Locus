@@ -64,7 +64,7 @@ final class DDIMountModel: ObservableObject {
         switch phase {
         case .unknown: return "开发者镜像状态未知"
         case .checking: return "正在检查开发者镜像…"
-        case .unreachable: return "先完成配对，才能检查镜像状态"
+        case .unreachable: return "连不上本机 lockdownd：请确认已用 TrollStore 安装、手机已解锁，且已完成本机配对"
         case .mounted, .succeeded: return "开发者镜像已挂载"
         case .notMounted: return "开发者镜像未挂载"
         case .downloading: return "正在下载开发者镜像（约 8 MB，仅首次）…"

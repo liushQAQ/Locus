@@ -314,6 +314,10 @@ enum DDIMounter {
     /// bound to the muxer (its pair-record store must hold our record —
     /// `LockdownPairService` saves it right after pairing).
     private static func usbmuxdProvider() -> OpaquePointer? {
+        // Reachability probe BEFORE the FFI layer (sandboxed installs must
+        // never touch the library — see UsbmuxdPreflight).
+        guard UsbmuxdPreflight.isReachable() else { return nil }
+
         var connection: OpaquePointer?
         let connectError = "/var/run/usbmuxd".withCString {
             idevice_usbmuxd_new_unix_socket_connection($0, 3, &connection)
@@ -330,20 +334,22 @@ enum DDIMounter {
             idevice_error_free(err)
             return nil
         }
-        guard let devices, count > 0, let basePtr = devices.pointee else {
+        guard let devices, count > 0 else { return nil }
+        // `devices` is the array of device handles itself (UsbmuxdDeviceHandle**
+        // per the FFI header). Element 0 IS the first handle — the old code
+        // took one indirection too many and dereferenced the device struct as
+        // a pointer array, which crashed the app on every launch that reached
+        // this path.
+        guard let firstDevice = devices.pointee else {
+            idevice_usbmuxd_device_list_free(devices, count)
             return nil
         }
-        let list = UnsafeMutablePointer<OpaquePointer?>(basePtr)
-        guard let first = list.pointee else {
-            idevice_usbmuxd_device_list_free(list, count)
-            return nil
-        }
-        let deviceID = idevice_usbmuxd_device_get_device_id(first)
-        let udid = idevice_usbmuxd_device_get_udid(first).map { ptr -> String in
+        let deviceID = idevice_usbmuxd_device_get_device_id(firstDevice)
+        let udid = idevice_usbmuxd_device_get_udid(firstDevice).map { ptr -> String in
             defer { idevice_string_free(ptr) }
             return String(cString: ptr)
         } ?? ""
-        idevice_usbmuxd_device_list_free(list, count)
+        idevice_usbmuxd_device_list_free(devices, count)
 
         var addr: OpaquePointer?
         let addrError = "/var/run/usbmuxd".withCString {
