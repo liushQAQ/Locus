@@ -6,7 +6,6 @@ struct MapHomeView: View {
     @EnvironmentObject private var pairing: PairingStore
 
     @StateObject private var search = PlaceSearchCompleter()
-    @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
     @State private var routeStart: CLLocationCoordinate2D?
@@ -17,110 +16,23 @@ struct MapHomeView: View {
     @State private var showGPXImporter = false
     @State private var drawnPath: [CLLocationCoordinate2D] = []
     @State private var drawMode = false
-    @State private var pinSelected = false
-    @State private var isDraggingPin = false
-    @State private var suppressNextMapTap = false
+    /// Shared camera command: both map flavors (iOS 17 / iOS 16) react to it.
+    @State private var cameraRequest: MKCoordinateRegion?
     /// Set when the pin comes from search / a named place so starring keeps the title.
     @State private var pinPlaceName: String?
-
-    private var mapStyle: MapStyle {
-        switch session.mapStyleIndex {
-        case 1: return .hybrid(elevation: .realistic)
-        case 2: return .imagery(elevation: .realistic)
-        default: return .standard(elevation: .realistic)
-        }
-    }
 
     var body: some View {
         ZStack(alignment: .top) {
             // Keep Map inside the safe layout bounds so MapProxy.convert matches
             // finger position. Ignoring the safe area makes the tiles full-bleed but
             // shifts convert() upward by ~status-bar height.
-            MapReader { proxy in
-                Map(position: $position) {
-                    UserAnnotation()
-
-                    if let pin = session.pin {
-                        Annotation("", coordinate: pin, anchor: .bottom) {
-                            MapDropPin(
-                                selected: pinSelected,
-                                isDragging: isDraggingPin,
-                                onSelect: {
-                                    searchFocused = false
-                                    suppressNextMapTap = true
-                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
-                                        pinSelected.toggle()
-                                    }
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                        suppressNextMapTap = false
-                                    }
-                                },
-                                onRemove: {
-                                    suppressNextMapTap = true
-                                    withAnimation {
-                                        session.pin = nil
-                                        pinSelected = false
-                                    }
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                        suppressNextMapTap = false
-                                    }
-                                },
-                                onDragBegan: {
-                                    searchFocused = false
-                                    suppressNextMapTap = true
-                                    pinSelected = false
-                                    isDraggingPin = true
-                                },
-                                onDragMoved: { globalPoint in
-                                    if let coord = proxy.convert(globalPoint, from: .global) {
-                                        session.pin = coord
-                                    }
-                                },
-                                onDragEnded: {
-                                    isDraggingPin = false
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                        suppressNextMapTap = false
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    if let sim = session.simulated {
-                        Annotation("Spoof", coordinate: sim) {
-                            ZStack {
-                                Circle().fill(LocusTheme.accent.opacity(0.25)).frame(width: 44, height: 44)
-                                Circle().fill(LocusTheme.accent).frame(width: 14, height: 14)
-                                    .overlay(Circle().stroke(.white, lineWidth: 2))
-                            }
-                        }
-                    }
-                    if routeCoords.count > 1 {
-                        MapPolyline(coordinates: routeCoords)
-                            .stroke(LocusTheme.accent, lineWidth: 5)
-                    }
-                    if drawnPath.count > 1 {
-                        MapPolyline(coordinates: drawnPath)
-                            .stroke(LocusTheme.accentSecondary, style: StrokeStyle(lineWidth: 4, dash: [6, 4]))
-                    }
-                }
-                .mapStyle(mapStyle)
-                .mapControlVisibility(.hidden)
-                .onTapGesture { point in
-                    searchFocused = false
-                    guard !suppressNextMapTap, !isDraggingPin else { return }
-                    pinSelected = false
-                    placePin(at: point, proxy: proxy)
-                }
-            }
-            .background(Color.black.ignoresSafeArea())
+            mapLayer
+                .background(Color.black.ignoresSafeArea())
 
             topChrome
         }
         .onAppear {
             session.startLocationUpdates()
-        }
-        .onChange(of: session.pin?.latitude) { _, newValue in
-            if newValue == nil { pinSelected = false }
         }
         .onReceive(NotificationCenter.default.publisher(for: .locusImportGPX)) { note in
             guard let url = note.object as? URL else { return }
@@ -150,6 +62,31 @@ struct MapHomeView: View {
         }
     }
 
+    // MARK: - Map flavors
+
+    @ViewBuilder
+    private var mapLayer: some View {
+        if #available(iOS 17.0, *) {
+            ModernMapView(
+                drawnPath: $drawnPath,
+                drawMode: drawMode,
+                routeCoords: routeCoords,
+                cameraRequest: $cameraRequest,
+                onPinPlaced: { pinPlaceName = nil }
+            )
+        } else {
+            LegacyMapView(
+                drawnPath: $drawnPath,
+                drawMode: drawMode,
+                routeCoords: routeCoords,
+                cameraRequest: $cameraRequest,
+                onPinPlaced: { pinPlaceName = nil }
+            )
+        }
+    }
+
+    // MARK: - Pin placement (shared by both map flavors)
+
     private func placePin(at point: CGPoint, proxy: MapProxy) {
         guard let coord = proxy.convert(point, from: .local) else { return }
         if drawMode {
@@ -157,11 +94,21 @@ struct MapHomeView: View {
         } else {
             session.pin = coord
             pinPlaceName = nil
-            pinSelected = false
         }
     }
 
+    // MARK: - Chrome
+
+    @ViewBuilder
     private var topChrome: some View {
+        if #available(iOS 17.0, *) {
+            chromeContent.safeAreaPadding(.top, 8)
+        } else {
+            chromeContent.padding(.top, 8)
+        }
+    }
+
+    private var chromeContent: some View {
         VStack(spacing: 10) {
             StatusBarView()
 
@@ -179,7 +126,6 @@ struct MapHomeView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 2)
-        .safeAreaPadding(.top, 8)
     }
 
     private var searchBar: some View {
@@ -193,7 +139,7 @@ struct MapHomeView: View {
                 .onSubmit {
                     searchFocused = false
                 }
-                .onChange(of: searchText) { _, value in
+                .onChange(of: searchText) { value in
                     search.query = value
                 }
             if searchFocused || !searchText.isEmpty {
@@ -292,33 +238,31 @@ struct MapHomeView: View {
         .accessibilityLabel("Current location")
     }
 
+    // MARK: - Camera commands
+
     /// Centers on the spoofed fix while spoofing, otherwise the real GPS —
-    /// never the leftover teleport pin (`.automatic` would frame that marker).
+    /// never the leftover teleport pin.
     private func goToCurrentLocation() {
         let meters: CLLocationDistance = 900
+        if session.isSpoofing, let sim = session.simulated {
+            requestCamera(center: sim, meters: meters)
+        } else if let real = session.realCoordinate {
+            requestCamera(center: real, meters: meters)
+        } else {
+            requestCamera(
+                center: CLLocationCoordinate2D(latitude: 37.3349, longitude: -122.0090),
+                meters: 2000
+            )
+        }
+    }
+
+    private func requestCamera(center: CLLocationCoordinate2D, meters: CLLocationDistance) {
         withAnimation(.easeInOut(duration: 0.35)) {
-            if session.isSpoofing, let sim = session.simulated {
-                position = .region(MKCoordinateRegion(
-                    center: sim,
-                    latitudinalMeters: meters,
-                    longitudinalMeters: meters
-                ))
-            } else if let real = session.realCoordinate {
-                position = .region(MKCoordinateRegion(
-                    center: real,
-                    latitudinalMeters: meters,
-                    longitudinalMeters: meters
-                ))
-            } else {
-                position = .userLocation(
-                    followsHeading: false,
-                    fallback: .region(MKCoordinateRegion(
-                        center: CLLocationCoordinate2D(latitude: 37.3349, longitude: -122.0090),
-                        latitudinalMeters: 2000,
-                        longitudinalMeters: 2000
-                    ))
-                )
-            }
+            cameraRequest = MKCoordinateRegion(
+                center: center,
+                latitudinalMeters: meters,
+                longitudinalMeters: meters
+            )
         }
     }
 
@@ -343,7 +287,7 @@ struct MapHomeView: View {
                 await MainActor.run {
                     session.pin = coord
                     pinPlaceName = title
-                    position = .region(MKCoordinateRegion(center: coord, latitudinalMeters: 1200, longitudinalMeters: 1200))
+                    requestCamera(center: coord, meters: 1200)
                     searchText = ""
                     search.query = ""
                     searchFocused = false
@@ -393,7 +337,7 @@ struct MapHomeView: View {
             routeCoords = RouteBuilder.sample(coordinates: coords, every: 10)
             if let first = coords.first {
                 session.pin = first
-                position = .region(MKCoordinateRegion(center: first, latitudinalMeters: 2000, longitudinalMeters: 2000))
+                requestCamera(center: first, meters: 2000)
             }
         } catch {
             session.lastError = error.localizedDescription
@@ -423,6 +367,242 @@ struct MapHomeView: View {
 
 private extension UIWindowScene {
     var keyWindow: UIWindow? { windows.first { $0.isKeyWindow } }
+}
+
+// MARK: - iOS 17+ modern map
+
+@available(iOS 17.0, *)
+private struct ModernMapView: View {
+    @EnvironmentObject private var session: SpoofSession
+
+    @Binding var drawnPath: [CLLocationCoordinate2D]
+    let drawMode: Bool
+    let routeCoords: [CLLocationCoordinate2D]
+    @Binding var cameraRequest: MKCoordinateRegion?
+    var onPinPlaced: () -> Void
+
+    @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
+    @State private var pinSelected = false
+    @State private var isDraggingPin = false
+    @State private var suppressNextMapTap = false
+
+    private var mapStyle: MapStyle {
+        switch session.mapStyleIndex {
+        case 1: return .hybrid(elevation: .realistic)
+        case 2: return .imagery(elevation: .realistic)
+        default: return .standard(elevation: .realistic)
+        }
+    }
+
+    var body: some View {
+        MapReader { proxy in
+            Map(position: $position) {
+                UserAnnotation()
+
+                if let pin = session.pin {
+                    Annotation("", coordinate: pin, anchor: .bottom) {
+                        MapDropPin(
+                            selected: pinSelected,
+                            isDragging: isDraggingPin,
+                            onSelect: {
+                                suppressNextMapTap = true
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                                    pinSelected.toggle()
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                    suppressNextMapTap = false
+                                }
+                            },
+                            onRemove: {
+                                suppressNextMapTap = true
+                                withAnimation {
+                                    session.pin = nil
+                                    pinSelected = false
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                    suppressNextMapTap = false
+                                }
+                            },
+                            onDragBegan: {
+                                suppressNextMapTap = true
+                                pinSelected = false
+                                isDraggingPin = true
+                            },
+                            onDragMoved: { globalPoint in
+                                if let coord = proxy.convert(globalPoint, from: .global) {
+                                    session.pin = coord
+                                }
+                            },
+                            onDragEnded: {
+                                isDraggingPin = false
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                    suppressNextMapTap = false
+                                }
+                            }
+                        )
+                    }
+                }
+                if let sim = session.simulated {
+                    Annotation("Spoof", coordinate: sim) {
+                        ZStack {
+                            Circle().fill(LocusTheme.accent.opacity(0.25)).frame(width: 44, height: 44)
+                            Circle().fill(LocusTheme.accent).frame(width: 14, height: 14)
+                                .overlay(Circle().stroke(.white, lineWidth: 2))
+                        }
+                    }
+                }
+                if routeCoords.count > 1 {
+                    MapPolyline(coordinates: routeCoords)
+                        .stroke(LocusTheme.accent, lineWidth: 5)
+                }
+                if drawnPath.count > 1 {
+                    MapPolyline(coordinates: drawnPath)
+                        .stroke(LocusTheme.accentSecondary, style: StrokeStyle(lineWidth: 4, dash: [6, 4]))
+                }
+            }
+            .mapStyle(mapStyle)
+            .mapControlVisibility(.hidden)
+            .onTapGesture { point in
+                guard !suppressNextMapTap, !isDraggingPin else { return }
+                pinSelected = false
+                placePin(at: point, proxy: proxy)
+            }
+        }
+        .onChange(of: cameraRequest) { request in
+            if let request {
+                position = .region(request)
+            }
+        }
+        .onChange(of: session.pin?.latitude) { newValue in
+            if newValue == nil { pinSelected = false }
+        }
+    }
+
+    private func placePin(at point: CGPoint, proxy: MapProxy) {
+        guard let coord = proxy.convert(point, from: .local) else { return }
+        if drawMode {
+            drawnPath.append(coord)
+        } else {
+            session.pin = coord
+            onPinPlaced()
+        }
+    }
+}
+
+// MARK: - iOS 16 legacy map
+
+private struct LegacyMapView: View {
+    @EnvironmentObject private var session: SpoofSession
+
+    @Binding var drawnPath: [CLLocationCoordinate2D]
+    let drawMode: Bool
+    let routeCoords: [CLLocationCoordinate2D]
+    @Binding var cameraRequest: MKCoordinateRegion?
+    var onPinPlaced: () -> Void
+
+    @State private var region = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 37.3349, longitude: -122.0090),
+        latitudinalMeters: 40000,
+        longitudinalMeters: 40000
+    )
+    @State private var pinSelected = false
+    @State private var isDraggingPin = false
+    @State private var suppressNextMapTap = false
+
+    var body: some View {
+        MapReader { proxy in
+            Map(
+                coordinateRegion: $region,
+                interactionModes: .all,
+                showsUserLocation: true,
+                userTrackingMode: nil
+            ) {
+                if let pin = session.pin {
+                    Annotation("", coordinate: pin, anchor: .bottom) {
+                        MapDropPin(
+                            selected: pinSelected,
+                            isDragging: isDraggingPin,
+                            onSelect: {
+                                suppressNextMapTap = true
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                                    pinSelected.toggle()
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                    suppressNextMapTap = false
+                                }
+                            },
+                            onRemove: {
+                                suppressNextMapTap = true
+                                withAnimation {
+                                    session.pin = nil
+                                    pinSelected = false
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                    suppressNextMapTap = false
+                                }
+                            },
+                            onDragBegan: {
+                                suppressNextMapTap = true
+                                pinSelected = false
+                                isDraggingPin = true
+                            },
+                            onDragMoved: { globalPoint in
+                                if let coord = proxy.convert(globalPoint, from: .global) {
+                                    session.pin = coord
+                                }
+                            },
+                            onDragEnded: {
+                                isDraggingPin = false
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                    suppressNextMapTap = false
+                                }
+                            }
+                        )
+                    }
+                }
+                if let sim = session.simulated {
+                    Annotation("Spoof", coordinate: sim) {
+                        ZStack {
+                            Circle().fill(LocusTheme.accent.opacity(0.25)).frame(width: 44, height: 44)
+                            Circle().fill(LocusTheme.accent).frame(width: 14, height: 14)
+                                .overlay(Circle().stroke(.white, lineWidth: 2))
+                        }
+                    }
+                }
+                if routeCoords.count > 1 {
+                    MapPolyline(coordinates: routeCoords)
+                        .stroke(LocusTheme.accent, lineWidth: 5)
+                }
+                if drawnPath.count > 1 {
+                    MapPolyline(coordinates: drawnPath)
+                        .stroke(LocusTheme.accentSecondary, style: StrokeStyle(lineWidth: 4, dash: [6, 4]))
+                }
+            }
+            .onTapGesture { point in
+                guard !suppressNextMapTap, !isDraggingPin else { return }
+                pinSelected = false
+                placePin(at: point, proxy: proxy)
+            }
+        }
+        .onChange(of: cameraRequest) { request in
+            if let request {
+                region = request
+            }
+        }
+        .onChange(of: session.pin?.latitude) { newValue in
+            if newValue == nil { pinSelected = false }
+        }
+    }
+
+    private func placePin(at point: CGPoint, proxy: MapProxy) {
+        guard let coord = proxy.convert(point, from: .local) else { return }
+        if drawMode {
+            drawnPath.append(coord)
+        } else {
+            session.pin = coord
+            onPinPlaced()
+        }
+    }
 }
 
 @MainActor

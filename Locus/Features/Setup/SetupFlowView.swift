@@ -31,6 +31,22 @@ struct SetupFlowView: View {
         return false
     }
 
+    /// iOS 16 and below use the lockdownd path (Developer Disk Image + lockdown pairing).
+    private var usesLockdownEngine: Bool {
+        if #available(iOS 17.0, *) { return false }
+        return true
+    }
+
+    private var pairingPageIntro: String {
+        if supportsOnDevicePairing {
+            return "Locus needs a one-time pairing so it can set your location. You’ll confirm a short code in Settings."
+        }
+        if usesLockdownEngine {
+            return "Locus needs a one-time lockdown pairing so it can set your location on this device. Tap Trust when the popup appears."
+        }
+        return "Import a pairing file from your computer — Locus uses it to set your location securely on this device."
+    }
+
     var body: some View {
         ZStack {
             background
@@ -65,17 +81,23 @@ struct SetupFlowView: View {
             withAnimation(.easeOut(duration: 0.7)) { appear = true }
             localDevVPNInstalled = LocalDevVPN.isInstalled
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase) { phase in
             if phase == .active {
                 localDevVPNInstalled = LocalDevVPN.isInstalled
             }
         }
-        .onChange(of: step) { _, newStep in
+        .onChange(of: step) { newStep in
             if newStep == .vpn {
                 localDevVPNInstalled = LocalDevVPN.isInstalled
             }
         }
-        .onChange(of: pairing.hasPairingFile) { _, hasFile in
+        .onChange(of: pairing.hasPairingFile) { hasFile in
+            if hasFile, step == .welcome || step == .pairing {
+                SetupGate.markInProgress()
+                withAnimation { step = .vpn }
+            }
+        }
+        .onChange(of: pairing.hasLockdownPairing) { hasFile in
             if hasFile, step == .welcome || step == .pairing {
                 SetupGate.markInProgress()
                 withAnimation { step = .vpn }
@@ -169,15 +191,24 @@ struct SetupFlowView: View {
 
     // MARK: - Welcome
 
+    @ViewBuilder
+    private var logoIcon: some View {
+        let icon = Image(systemName: "location.north.circle.fill")
+            .font(.system(size: 64, weight: .light))
+            .foregroundStyle(LocusTheme.accent)
+        if #available(iOS 17.0, *) {
+            icon.symbolEffect(.pulse, options: .repeating.speed(0.4), isActive: appear)
+        } else {
+            icon
+        }
+    }
+
     private var welcomePage: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 24)
 
             VStack(spacing: 20) {
-                Image(systemName: "location.north.circle.fill")
-                    .font(.system(size: 64, weight: .light))
-                    .foregroundStyle(LocusTheme.accent)
-                    .symbolEffect(.pulse, options: .repeating.speed(0.4), isActive: appear)
+                logoIcon
                     .opacity(appear ? 1 : 0)
                     .scaleEffect(appear ? 1 : 0.85)
 
@@ -222,9 +253,7 @@ struct SetupFlowView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Connect this iPhone")
                     .font(.title.weight(.bold))
-                Text(supportsOnDevicePairing
-                     ? "Locus needs a one-time pairing so it can set your location. You’ll confirm a short code in Settings."
-                     : "Import a pairing file from your computer — Locus uses it to set your location securely on this device.")
+                Text(pairingPageIntro)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -238,6 +267,11 @@ struct SetupFlowView: View {
                     withAnimation { step = .vpn }
                 }
                 .environmentObject(pairing)
+            } else if usesLockdownEngine {
+                LockdownPairingView()
+                    .padding(.horizontal, 24)
+                    .environmentObject(pairing)
+                    .environmentObject(session)
             } else {
                 importPairingCard
                     .padding(.horizontal, 24)

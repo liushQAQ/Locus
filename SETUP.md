@@ -33,6 +33,27 @@ File pickers often break inside LiveContainer. Do one of the following:
 3. Generate an **RPPairing** file (not lockdown / SideStore `.mobiledevicepairing`).
 4. AirDrop / Share → Open in **Locus**, **Import**, or **Paste from clipboard**.
 
+### On iOS 14–16 (lockdown engine)
+
+iOS 16 and below use the classic lockdownd developer service. Two requirements:
+
+**A. Pairing record** — do one of:
+
+1. **Pair on this iPhone (no computer):** Locus → Settings (or first-run setup) → **Pair on this iPhone**, keep the phone unlocked, tap **Trust** in the popup.
+2. **Import from a computer:** install [pymobiledevice3](https://github.com/doronz88/pymobiledevice3) (`pip install pymobiledevice3`), plug in and pair:
+   ```
+   pymobiledevice3 lockdown pair
+   ```
+   Then copy `%USERPROFILE%\.pymobiledevice3\pairing_records\<UDID>.plist` (Windows) or `~/.pymobiledevice3/pairing_records/<UDID>.plist` (macOS) to the phone and **Import** it in Locus (or Paste its contents).
+
+**B. Developer Disk Image (once per reboot)** — the location simulation service only exists while the DDI is mounted. From the same computer (phone plugged in):
+
+```
+pymobiledevice3 developer ddi mount
+```
+
+After every phone reboot, run this once more (~1 minute); no computer needed while spoofing itself.
+
 ## 3. LocalDevVPN
 
 Install [LocalDevVPN](https://apps.apple.com/us/app/localdevvpn/id6755608044), connect it (default tunnel IP `10.7.0.1`).
@@ -40,3 +61,9 @@ Install [LocalDevVPN](https://apps.apple.com/us/app/localdevvpn/id6755608044), c
 ## 4. Teleport
 
 On Wi‑Fi: drop a pin → **Teleport**. Then joystick / routes / GPX work; the session can continue on cellular.
+
+### iOS 16 notes
+
+- The map falls back to the classic (pre-iOS 17) map flavor; pin drag, draw, routes and GPX all work, map style switching is standard-only.
+- If teleport fails with "Developer Disk Image not mounted", run `pymobiledevice3 developer ddi mount` from the computer once.
+

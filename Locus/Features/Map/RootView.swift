@@ -100,10 +100,10 @@ struct StatusBarView: View {
             }
         }
         .onAppear { refreshTunnel() }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase) { phase in
             if phase == .active { refreshTunnel() }
         }
-        .onChange(of: session.status) { _, _ in
+        .onChange(of: session.status) { _ in
             refreshTunnel()
         }
         .onReceive(NotificationCenter.default.publisher(for: .NEVPNStatusDidChange)) { _ in

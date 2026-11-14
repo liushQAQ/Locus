@@ -18,6 +18,12 @@ struct SettingsView: View {
         return false
     }
 
+    /// iOS 16 and below use the lockdownd path.
+    private var usesLockdownEngine: Bool {
+        if #available(iOS 17.0, *) { return false }
+        return true
+    }
+
     private var appVersion: String {
         let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
@@ -62,6 +68,18 @@ struct SettingsView: View {
                     Text(supportsOnDevicePairing
                          ? "On iOS 27, use Pair on this iPhone — no computer. Locus advertises a pairable host; confirm the 6-digit code under Settings › Privacy & Security › Developer Mode › Pair with Host. On older iOS, import an RPPairing file from idevice_pair (not a SideStore lockdown .mobiledevicepairing). LiveContainer: enable Fix File Picker on Locus, or use Paste / Share → LiveContainer → Locus."
                          : "Import an RPPairing file from idevice_pair (not a SideStore lockdown .mobiledevicepairing). If the file picker fails (common in LiveContainer), enable Fix File Picker on the app, share the file into LiveContainer → Locus, or copy the plist and use Paste.")
+                }
+
+                if usesLockdownEngine {
+                    Section {
+                        LockdownPairingView()
+                            .environmentObject(pairing)
+                            .environmentObject(session)
+                    } header: {
+                        Text("Lockdown pairing (iOS 16 and below)")
+                    } footer: {
+                        Text("Pair on this iPhone (tap Trust in the popup) or import a lockdown pairing record exported with pymobiledevice3. After every reboot, mount the Developer Disk Image once from a computer: pymobiledevice3 developer ddi mount")
+                    }
                 }
 
                 Section {
@@ -159,7 +177,7 @@ struct SettingsView: View {
             .onAppear {
                 localDevVPNInstalled = LocalDevVPN.isInstalled
             }
-            .onChange(of: scenePhase) { _, phase in
+            .onChange(of: scenePhase) { phase in
                 if phase == .active {
                     localDevVPNInstalled = LocalDevVPN.isInstalled
                 }

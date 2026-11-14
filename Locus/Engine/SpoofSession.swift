@@ -104,9 +104,17 @@ final class SpoofSession: ObservableObject {
         return false
     }
 
+    /// What the user needs to do about pairing, per OS version.
+    static var pairingHint: String {
+        if #available(iOS 17.0, *) {
+            return "Import an RPPairing file in Settings first."
+        }
+        return "Pair on this iPhone (accept the Trust prompt) or import a lockdown pairing record in Settings first."
+    }
+
     func teleport(to coordinate: CLLocationCoordinate2D, pairing: PairingStore) {
-        guard pairing.hasPairingFile else {
-            lastError = "Import an RPPairing file in Settings first."
+        guard pairing.hasUsablePairing else {
+            lastError = Self.pairingHint
             return
         }
         pin = coordinate
@@ -148,8 +156,8 @@ final class SpoofSession: ObservableObject {
     }
 
     func startJoystick(pairing: PairingStore) {
-        guard pairing.hasPairingFile else {
-            lastError = "Import an RPPairing file in Settings first."
+        guard pairing.hasUsablePairing else {
+            lastError = Self.pairingHint
             return
         }
         let start = simulated ?? pin ?? locationKeeper.lastKnownCoordinate
@@ -296,6 +304,7 @@ final class SpoofSession: ObservableObject {
             latitude: coordinate.latitude,
             longitude: coordinate.longitude,
             pairingPath: pairing.pairingPath,
+            lockdownPairingPath: pairing.lockdownPairingPath,
             deviceIP: TunnelConfig.targetIP
         )
         isBusy = false
@@ -341,12 +350,13 @@ final class SpoofSession: ObservableObject {
         resendTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let sim = self.simulated else { return }
-                _ = LocationEngine.set(
-                    latitude: sim.latitude,
-                    longitude: sim.longitude,
-                    pairingPath: pairing.pairingPath,
-                    deviceIP: TunnelConfig.targetIP
-                )
+            _ = LocationEngine.set(
+                latitude: sim.latitude,
+                longitude: sim.longitude,
+                pairingPath: pairing.pairingPath,
+                lockdownPairingPath: pairing.lockdownPairingPath,
+                deviceIP: TunnelConfig.targetIP
+            )
             }
         }
     }

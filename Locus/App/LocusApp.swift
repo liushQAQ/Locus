@@ -41,7 +41,12 @@ struct LocusApp: App {
     private func handleIncoming(_ url: URL) {
         let ext = url.pathExtension.lowercased()
         if ["plist", "mobiledevicepairing", "mobiledevicepair"].contains(ext) {
-            try? pairing.importPairing(from: url)
+            // Route to the record type this OS actually consumes.
+            if #available(iOS 17.0, *) {
+                try? pairing.importPairing(from: url)
+            } else {
+                try? pairing.importLockdownPairing(from: url)
+            }
         } else if ext == "gpx" {
             NotificationCenter.default.post(name: .locusImportGPX, object: url)
         }

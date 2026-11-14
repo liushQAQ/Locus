@@ -38,12 +38,12 @@ struct PairOnDeviceView: View {
                 scrollContent
             }
         }
-        .onChange(of: host.phase) { _, phase in
+        .onChange(of: host.phase) { phase in
             if case .succeeded = phase {
                 pairing.refresh()
             }
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase) { phase in
             if phase == .active, host.isBusy {
                 _ = host.pin
             }

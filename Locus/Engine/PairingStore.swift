@@ -5,9 +5,11 @@ import UIKit
 @MainActor
 final class PairingStore: ObservableObject {
     @Published private(set) var hasPairingFile = false
+    @Published private(set) var hasLockdownPairing = false
     @Published var lastError: String?
 
     static let fileName = "rp_pairing_file.plist"
+    static let lockdownFileName = "lockdown_pairing.plist"
     static let supportedTypes: [UTType] = {
         var types: [UTType] = [
             .item,          // anything — sideloaded plists often lack a proper UTI
@@ -35,7 +37,24 @@ final class PairingStore: ObservableObject {
         directoryURL.appendingPathComponent(Self.fileName)
     }
 
+    var lockdownPairingURL: URL {
+        directoryURL.appendingPathComponent(Self.lockdownFileName)
+    }
+
     var pairingPath: String { pairingURL.path }
+
+    var lockdownPairingPath: String? {
+        hasLockdownPairing ? lockdownPairingURL.path : nil
+    }
+
+    /// The record this device's iOS version actually needs:
+    /// iOS 17+ → RPPairing (RemotePairing), iOS 16- → lockdown pairing record.
+    var hasUsablePairing: Bool {
+        if #available(iOS 17.0, *) {
+            return hasPairingFile
+        }
+        return hasLockdownPairing
+    }
 
     init() {
         refresh()
@@ -44,24 +63,59 @@ final class PairingStore: ObservableObject {
     func refresh() {
         try? FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         hasPairingFile = FileManager.default.fileExists(atPath: pairingURL.path)
+        hasLockdownPairing = FileManager.default.fileExists(atPath: lockdownPairingURL.path)
     }
 
     func importPairing(from sourceURL: URL) throws {
-        let accessing = sourceURL.startAccessingSecurityScopedResource()
-        defer { if accessing { sourceURL.stopAccessingSecurityScopedResource() } }
-
-        let data = try Data(contentsOf: sourceURL)
+        let data = try readSecurityScoped(sourceURL)
         try installPairingData(data)
+    }
+
+    /// iOS 16- lockdown pairing record import (pymobiledevice3 export, etc.).
+    func importLockdownPairing(from sourceURL: URL) throws {
+        let data = try readSecurityScoped(sourceURL)
+        try installLockdownPairingData(data)
     }
 
     /// LiveContainer / broken pickers: copy the plist text (or file) then paste here.
     func importPairingFromClipboard() throws {
+        let data = try clipboardPairingData()
+        try installPairingData(data)
+    }
+
+    func importLockdownPairingFromClipboard() throws {
+        let data = try clipboardPairingData()
+        try installLockdownPairingData(data)
+    }
+
+    func removePairing() throws {
+        if FileManager.default.fileExists(atPath: pairingURL.path) {
+            try FileManager.default.removeItem(at: pairingURL)
+        }
+        hasPairingFile = false
+    }
+
+    func removeLockdownPairing() throws {
+        if FileManager.default.fileExists(atPath: lockdownPairingURL.path) {
+            try FileManager.default.removeItem(at: lockdownPairingURL)
+        }
+        hasLockdownPairing = false
+    }
+
+    // MARK: - Internals
+
+    private func readSecurityScoped(_ sourceURL: URL) throws -> Data {
+        let accessing = sourceURL.startAccessingSecurityScopedResource()
+        defer { if accessing { sourceURL.stopAccessingSecurityScopedResource() } }
+        return try Data(contentsOf: sourceURL)
+    }
+
+    private func clipboardPairingData() throws -> Data {
         let board = UIPasteboard.general
 
         if let url = board.url ?? board.urls?.first {
             if url.isFileURL {
-                try importPairing(from: url)
-                return
+                return try readSecurityScoped(url)
             }
         }
 
@@ -76,14 +130,7 @@ final class PairingStore: ObservableObject {
         guard let data = candidates.compactMap({ $0 }).first(where: { !$0.isEmpty }) else {
             throw PairingImportError.emptyClipboard
         }
-        try installPairingData(data)
-    }
-
-    func removePairing() throws {
-        if FileManager.default.fileExists(atPath: pairingURL.path) {
-            try FileManager.default.removeItem(at: pairingURL)
-        }
-        hasPairingFile = false
+        return data
     }
 
     private func installPairingData(_ data: Data) throws {
@@ -98,6 +145,22 @@ final class PairingStore: ObservableObject {
         try data.write(to: pairingURL, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: pairingURL.path)
         hasPairingFile = true
+        lastError = nil
+    }
+
+    /// Called by LockdownPairer after a successful on-device pair.
+    func installLockdownPairingData(_ data: Data) throws {
+        guard looksLikePairingPlist(data) else {
+            throw PairingImportError.invalidContents
+        }
+
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        if FileManager.default.fileExists(atPath: lockdownPairingURL.path) {
+            try FileManager.default.removeItem(at: lockdownPairingURL)
+        }
+        try data.write(to: lockdownPairingURL, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: lockdownPairingURL.path)
+        hasLockdownPairing = true
         lastError = nil
     }
 
@@ -119,9 +182,9 @@ enum PairingImportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .emptyClipboard:
-            return "Clipboard is empty. Copy your RPPairing plist text (or the file), then try Paste again."
+            return "Clipboard is empty. Copy the pairing plist text (or the file), then try Paste again."
         case .invalidContents:
-            return "That doesn’t look like an RPPairing plist. Copy the full pairing file contents and try again."
+            return "That doesn’t look like a pairing plist. Copy the full pairing file contents and try again."
         }
     }
 }
