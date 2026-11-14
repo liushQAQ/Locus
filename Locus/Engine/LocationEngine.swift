@@ -20,22 +20,22 @@ enum LocationEngineError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidIP: return "Tunnel IP is invalid. Check Settings → Tunnel IP (usually 10.7.0.1)."
-        case .pairingRead: return "Could not read the RPPairing file. Generate one with idevice_pair in RPPairing mode."
-        case .tunnelCreate: return "Could not open the developer tunnel. Is LocalDevVPN connected on Wi‑Fi?"
-        case .remoteServer: return "Connected to the tunnel but RemoteXPC handshake failed."
-        case .simulationCreate: return "Could not open Apple’s location simulation service."
-        case .locationSet: return "Failed to set simulated coordinates."
-        case .locationClear: return "Failed to clear simulated location."
-        case .notActive: return "No active simulation session."
+        case .invalidIP: return "隧道 IP 无效。请检查 设置 → 隧道 IP（一般为 10.7.0.1）。"
+        case .pairingRead: return "无法读取 RPPairing 文件。请用 idevice_pair 以 RPPairing 模式生成。"
+        case .tunnelCreate: return "无法打开开发者隧道。请确认 LocalDevVPN 已在 Wi-Fi 下连接。"
+        case .remoteServer: return "隧道已连上，但 RemoteXPC 握手失败。"
+        case .simulationCreate: return "无法打开系统的位置模拟服务。"
+        case .locationSet: return "设置模拟坐标失败。"
+        case .locationClear: return "清除模拟位置失败。"
+        case .notActive: return "当前没有模拟会话。"
         case .lockdownPairingMissing:
-            return "No lockdown pairing record. On iOS 16: tap “Pair on this iPhone” (accept the Trust prompt), or import a lockdown pairing record."
+            return "没有 lockdown 配对记录。iOS 16 上请点“在本机配对”（弹窗点信任），或导入 lockdown 配对记录。"
         case .lockdownPairingRead:
-            return "Could not read the lockdown pairing record. Re-pair or re-import it."
+            return "无法读取 lockdown 配对记录，请重新配对或重新导入。"
         case .lockdownConnect:
-            return "Could not reach the lockdownd location service. Check: 1) LocalDevVPN connected, 2) Developer Disk Image mounted (run “pymobiledevice3 developer ddi mount” on your computer once after every reboot), 3) pairing record still valid."
+            return "连不上 lockdownd 定位服务。请检查：1) LocalDevVPN 已连接；2) 开发者磁盘镜像已挂载（手机每次重启后用电脑跑一次 pymobiledevice3 developer ddi mount）；3) 配对记录仍有效。"
         case .lockdownSet:
-            return "Lockdown location simulation failed. Make sure the Developer Disk Image is mounted (pymobiledevice3 developer ddi mount) and the pairing record is valid."
+            return "lockdown 位置模拟失败。请确认开发者磁盘镜像已挂载（pymobiledevice3 developer ddi mount）且配对记录有效。"
         }
     }
 
