@@ -18,20 +18,20 @@ enum LockdownPairService {
         var errorDescription: String? {
             switch self {
             case .tunnelUnreachable:
-                return "Could not reach lockdownd. Connect LocalDevVPN first (Tunnel IP 10.7.0.1)."
+                return "连不上 lockdownd。请先连接 LocalDevVPN（隧道 IP 10.7.0.1）。"
             case .lockdown(let detail):
                 return detail
             case .noRecord:
-                return "Paired but no pairing record was returned."
+                return "配对完成，但未返回配对记录。"
             case .serialize:
-                return "Could not serialize the pairing record."
+                return "配对记录序列化失败。"
             }
         }
     }
 
     static func pair() -> Result<Data, PairError> {
         .failure(.lockdown(
-            "On-device lockdown pairing is unavailable in this build (the bundled idevice library predates lockdownd_pair). On a computer run `pymobiledevice3 pair`, then import ~/.pymobiledevice3/pairing_records/<udid>.plist here — the same connection is needed for DDI mounting anyway."
+            "本构建无法在手机上直接配对（内置 idevice 库版本较老，缺少 lockdownd_pair）。请在电脑上运行 `pymobiledevice3 pair`，然后把 ~/.pymobiledevice3/pairing_records/<udid>.plist 传到手机并在这里导入——挂载开发者磁盘镜像（DDI）本来也需要这条电脑连接。"
         ))
     }
 }
