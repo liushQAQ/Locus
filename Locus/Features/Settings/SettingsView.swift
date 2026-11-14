@@ -45,12 +45,12 @@ struct SettingsView: View {
                         Button {
                             showPairOnDevice = true
                         } label: {
-                            Label("Pair on this iPhone", systemImage: "iphone.gen3.radiowaves.left.and.right")
+                            Label("在本机配对", systemImage: "iphone.gen3.radiowaves.left.and.right")
                         }
                     }
 
-                    Button("Import RPPairing file…") { showImporter = true }
-                    Button("Paste RPPairing from clipboard") {
+                    Button("导入 RPPairing 文件…") { showImporter = true }
+                    Button("从剪贴板粘贴 RPPairing") {
                         do {
                             try pairing.importPairingFromClipboard()
                         } catch {
@@ -58,12 +58,12 @@ struct SettingsView: View {
                         }
                     }
                     if pairing.hasPairingFile {
-                        Button("Remove pairing file", role: .destructive) {
+                        Button("移除配对文件", role: .destructive) {
                             try? pairing.removePairing()
                         }
                     }
                 } header: {
-                    Text("Developer pairing")
+                    Text("开发者配对")
                 } footer: {
                     Text(supportsOnDevicePairing
                          ? "On iOS 27, use Pair on this iPhone — no computer. Locus advertises a pairable host; confirm the 6-digit code under Settings › Privacy & Security › Developer Mode › Pair with Host. On older iOS, import an RPPairing file from idevice_pair (not a SideStore lockdown .mobiledevicepairing). LiveContainer: enable Fix File Picker on Locus, or use Paste / Share → LiveContainer → Locus."
@@ -76,14 +76,14 @@ struct SettingsView: View {
                             .environmentObject(pairing)
                             .environmentObject(session)
                     } header: {
-                        Text("Lockdown pairing (iOS 16 and below)")
+                        Text("lockdown 配对（iOS 16 及以下）")
                     } footer: {
-                        Text("Pair on this iPhone (tap Trust in the popup) or import a lockdown pairing record exported with pymobiledevice3. After every reboot, mount the Developer Disk Image once from a computer: pymobiledevice3 developer ddi mount")
+                        Text("“在本机配对”（弹窗点信任）或导入 pymobiledevice3 导出的 lockdown 配对记录。手机每次重启后，用电脑挂载一次开发者磁盘镜像：pymobiledevice3 developer ddi mount")
                     }
                 }
 
                 Section {
-                    TextField("Device tunnel IP", text: $tunnelIP)
+                    TextField("设备隧道 IP", text: $tunnelIP)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .onSubmit {
@@ -93,7 +93,7 @@ struct SettingsView: View {
                         Text(LocalDevVPN.isConnected ? "Connected" : "Not connected")
                             .foregroundStyle(LocalDevVPN.isConnected ? LocusTheme.statusGood : LocusTheme.statusWarn)
                     }
-                    Button("Save tunnel IP") {
+                    Button("保存隧道 IP") {
                         TunnelConfig.setTargetIP(tunnelIP)
                     }
                     Button {
@@ -109,13 +109,13 @@ struct SettingsView: View {
                         )
                     }
                 } header: {
-                    Text("Tunnel")
+                    Text("隧道")
                 } footer: {
-                    Text("Connect LocalDevVPN before teleporting. Default tunnel IP is 10.7.0.1. Start a spoof on Wi‑Fi first; it can keep working on cellular afterward.")
+                    Text("传送前先连接 LocalDevVPN，默认隧道 IP 为 10.7.0.1。首次虚拟请在 Wi-Fi 下启动，之后蜂窝网络也能继续。")
                 }
 
                 Section("Privacy") {
-                    Text("Fully on-device. Favorites and recents stay in UserDefaults. No analytics, no accounts, nothing uploaded.")
+                    Text("完全本地运行。收藏与历史仅存于本机。无统计埋点、无账号、不上传任何数据。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -123,7 +123,7 @@ struct SettingsView: View {
                 Section("About") {
                     LabeledContent("Version", value: appVersion)
                     LabeledContent("Engine", value: "idevice DVT location simulation")
-                    Text("Locus is free and open source (MIT). Location injection uses the MIT-licensed idevice FFI.")
+                    Text("Locus 免费开源（MIT）。位置注入使用 MIT 许可的 idevice FFI 库。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -132,7 +132,7 @@ struct SettingsView: View {
                     Button {
                         showNameEasterEgg = true
                     } label: {
-                        Text("locus, n. — a place. From the Latin for where you are.")
+                        Text("locus，名词，意为“地点”，源自拉丁语“你所在之处”。")
                             .font(.footnote.italic())
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -144,10 +144,10 @@ struct SettingsView: View {
                     .listRowSeparator(.hidden)
                 }
             }
-            .navigationTitle("Settings")
+            .navigationTitle("设置")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                    Button("完成") {
                         TunnelConfig.setTargetIP(tunnelIP)
                         dismiss()
                     }
@@ -199,7 +199,7 @@ struct PlacesView: View {
             List {
                 Section("Favorites") {
                     if session.favorites.isEmpty {
-                        Text("Star a pin from the map to save it.")
+                        Text("在地图上给落点加星即可收藏。")
                             .foregroundStyle(.secondary)
                     }
                     ForEach(session.favorites) { place in
@@ -208,13 +208,13 @@ struct PlacesView: View {
                                 Button(role: .destructive) {
                                     session.removeFavorite(place)
                                 } label: {
-                                    Label("Delete", systemImage: "trash.fill")
+                                    Label("删除", systemImage: "trash.fill")
                                 }
                                 Button {
                                     placeToRename = place
                                     renameText = place.name
                                 } label: {
-                                    Label("Rename", systemImage: "pencil")
+                                    Label("重命名", systemImage: "pencil")
                                 }
                                 .tint(.gray)
                             }
@@ -223,7 +223,7 @@ struct PlacesView: View {
 
                 Section("Recents") {
                     if session.recents.isEmpty {
-                        Text("Teleports show up here.")
+                        Text("传送历史会显示在这里。")
                             .foregroundStyle(.secondary)
                     }
                     ForEach(session.recents) { place in
@@ -232,34 +232,34 @@ struct PlacesView: View {
                                 Button(role: .destructive) {
                                     session.removeRecent(place)
                                 } label: {
-                                    Label("Delete", systemImage: "trash.fill")
+                                    Label("删除", systemImage: "trash.fill")
                                 }
                             }
                     }
                 }
             }
-            .navigationTitle("Places")
+            .navigationTitle("收藏与历史")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button("完成") { dismiss() }
                 }
             }
-            .alert("Rename Favorite", isPresented: Binding(
+            .alert("重命名收藏", isPresented: Binding(
                 get: { placeToRename != nil },
                 set: { if !$0 { placeToRename = nil } }
             )) {
-                TextField("Name", text: $renameText)
-                Button("Cancel", role: .cancel) {
+                TextField("名称", text: $renameText)
+                Button("取消", role: .cancel) {
                     placeToRename = nil
                 }
-                Button("Save") {
+                Button("保存") {
                     if let place = placeToRename {
                         session.renameFavorite(place, to: renameText)
                     }
                     placeToRename = nil
                 }
             } message: {
-                Text("Choose a name you’ll recognize later.")
+                Text("起个你以后能认出来的名字。")
             }
         }
     }
