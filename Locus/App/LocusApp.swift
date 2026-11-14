@@ -8,7 +8,7 @@ struct LocusApp: App {
 
     /// Map when setup finished, or when already paired outside this walkthrough.
     private var showMap: Bool {
-        setupComplete || (pairing.hasPairingFile && !SetupGate.isInProgress)
+        setupComplete || (pairing.hasUsablePairing && !SetupGate.isInProgress)
     }
 
     var body: some Scene {
@@ -17,7 +17,10 @@ struct LocusApp: App {
                 if showMap {
                     RootView()
                 } else {
-                    SetupFlowView(initialStep: SetupGate.initialStep(hasPairingFile: pairing.hasPairingFile)) {
+                    SetupFlowView(initialStep: SetupGate.initialStep(
+                        hasPairingFile: pairing.hasPairingFile,
+                        hasLockdownPairing: pairing.hasLockdownPairing
+                    )) {
                         SetupGate.markComplete()
                         setupComplete = true
                     }
@@ -30,7 +33,7 @@ struct LocusApp: App {
                 handleIncoming(url)
             }
             .onAppear {
-                if !setupComplete, pairing.hasPairingFile, !SetupGate.isInProgress {
+                if !setupComplete, pairing.hasUsablePairing, !SetupGate.isInProgress {
                     SetupGate.markComplete()
                     setupComplete = true
                 }

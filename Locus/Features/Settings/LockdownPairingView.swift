@@ -75,6 +75,8 @@ struct LockdownPairingView: View {
                 }
             }
 
+            DDIMountCard()
+
             stepsCard
         }
     }
@@ -91,9 +93,10 @@ struct LockdownPairingView: View {
 
     private var stepsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepRow(1, "解锁手机后点“在本机配对”，弹窗出现时点“信任”。")
-            stepRow(2, "已在电脑上配对过？用 pymobiledevice3 导出配对记录（在 ~/.pymobiledevice3/pairing_records 目录），传到手机后在这里导入。")
-            stepRow(3, "手机每次重启后，都要用电脑挂载一次开发者磁盘镜像：pymobiledevice3 developer ddi mount")
+            stepRow(1, "解锁手机后点“在本机配对”，弹出“信任此电脑？”时点“信任”。全程在手机上完成，无需电脑。")
+            stepRow(2, "配对成功后点“挂载开发者镜像”（约 8 MB，仅首次下载；手机需要联网）。")
+            stepRow(3, "手机每次重启后重新点一次“挂载开发者镜像”即可，配对记录长期有效。")
+            stepRow(4, "不想本机配对？也可以在电脑上用 pymobiledevice3 导出配对记录后在这里导入。")
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)

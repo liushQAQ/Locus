@@ -12,6 +12,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The committed Vendor/idevice/libidevice_ffi.a is from an older idevice
+      # revision without lockdownd_pair/image_mounter. Fetch the matching
+      # v0.1.68 arm64 iOS slice (kept out of git: 196 MB > GitHub push limit).
+      - name: Fetch vendored idevice FFI (v0.1.68, arm64 iOS)
+        run: |
+          curl -sL -o /tmp/xc.zip \
+            "https://github.com/jkcoxson/idevice/releases/download/v0.1.68/idevice-xcframework-v0.1.68.zip"
+          echo "c9eccdd1942de756d746a2569d93302774ab0eff1cff314ec8118f768b3d8dc7  /tmp/xc.zip" | shasum -a 256 -c -
+          unzip -o -q /tmp/xc.zip "swift/IDevice.xcframework/ios-arm64/*" -d /tmp/xc
+          cp /tmp/xc/swift/IDevice.xcframework/ios-arm64/libidevice_ffi.a Vendor/idevice/libidevice_ffi.a
+          ls -lh Vendor/idevice/
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
@@ -41,6 +53,13 @@ jobs:
         run: |
           mkdir -p Payload
           cp -R "build/Build/Products/Release-iphoneos/Locus.app" Payload/
+          # Embed entitlements into the binary so TrollStore/roothide preserve
+          # them on install (no-sandbox → usbmuxd socket path).
+          brew install ldid
+          ldid -SLocus/Resources/Locus.entitlements Payload/Locus.app/Locus
+          ldid -e Payload/Locus.app/Locus > embedded-entitlements.plist
+          cat embedded-entitlements.plist
+          rm -f embedded-entitlements.plist
           zip -qry Locus-unsigned-ios16.ipa Payload
           ls -lh Locus-unsigned-ios16.ipa
 

@@ -78,7 +78,7 @@ struct SettingsView: View {
                     } header: {
                         Text("lockdown 配对（iOS 16 及以下）")
                     } footer: {
-                        Text("“在本机配对”（弹窗点信任）或导入 pymobiledevice3 导出的 lockdown 配对记录。手机每次重启后，用电脑挂载一次开发者磁盘镜像：pymobiledevice3 developer ddi mount")
+                        Text("「在本机配对」（弹窗点信任）或导入 lockdown 配对记录。下方卡片一键挂载开发者镜像（手机重启后重新挂载一次），全程无需电脑、无需 VPN。")
                     }
                 }
 

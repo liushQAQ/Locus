@@ -13,11 +13,13 @@ struct SetupFlowView: View {
     @State private var appear = false
     @State private var showImporter = false
     @State private var localDevVPNInstalled = LocalDevVPN.isInstalled
+    @StateObject private var ddiModel = DDIMountModel()
     @Environment(\.scenePhase) private var scenePhase
 
-    enum Step: Int, CaseIterable {
+    enum Step: Int {
         case welcome
         case pairing
+        case ddi
         case vpn
     }
 
@@ -35,6 +37,18 @@ struct SetupFlowView: View {
     private var usesLockdownEngine: Bool {
         if #available(iOS 17.0, *) { return false }
         return true
+    }
+
+    /// Steps this install actually walks through; iOS 16 ends at the DDI page
+    /// (no LocalDevVPN needed — the loopback lockdown channel carries it).
+    private var steps: [Step] {
+        if usesLockdownEngine {
+            return [.welcome, .pairing, .ddi]
+        }
+        if supportsOnDevicePairing {
+            return [.welcome, .pairing, .vpn]
+        }
+        return [.welcome, .pairing, .vpn]
     }
 
     private var pairingPageIntro: String {
@@ -62,6 +76,8 @@ struct SetupFlowView: View {
                         welcomePage
                     case .pairing:
                         pairingPage
+                    case .ddi:
+                        ddiPage
                     case .vpn:
                         vpnPage
                     }
@@ -94,13 +110,13 @@ struct SetupFlowView: View {
         .onChange(of: pairing.hasPairingFile) { hasFile in
             if hasFile, step == .welcome || step == .pairing {
                 SetupGate.markInProgress()
-                withAnimation { step = .vpn }
+                withAnimation { step = usesLockdownEngine ? .ddi : .vpn }
             }
         }
         .onChange(of: pairing.hasLockdownPairing) { hasFile in
             if hasFile, step == .welcome || step == .pairing {
                 SetupGate.markInProgress()
-                withAnimation { step = .vpn }
+                withAnimation { step = usesLockdownEngine ? .ddi : .vpn }
             }
         }
         .sheet(isPresented: $showImporter) {
@@ -178,7 +194,7 @@ struct SetupFlowView: View {
 
     private var progressBar: some View {
         HStack(spacing: 8) {
-            ForEach(Step.allCases, id: \.rawValue) { s in
+            ForEach(steps, id: \.rawValue) { s in
                 Capsule()
                     .fill(s.rawValue <= step.rawValue ? LocusTheme.accent : Color.white.opacity(0.12))
                     .frame(height: 3)
@@ -186,7 +202,7 @@ struct SetupFlowView: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("第 \(step.rawValue + 1) 步 / 共 \(Step.allCases.count) 步")
+        .accessibilityLabel("第 \(step.rawValue + 1) 步 / 共 \(steps.count) 步")
     }
 
     // MARK: - Welcome
@@ -329,6 +345,55 @@ struct SetupFlowView: View {
         }
     }
 
+    // MARK: - Developer Disk Image (iOS 16 and below)
+
+    private var ddiPage: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 20)
+
+            VStack(spacing: 22) {
+                Image(systemName: "externaldrive.badge.icloud")
+                    .font(.system(size: 56, weight: .light))
+                    .foregroundStyle(LocusTheme.accent)
+
+                VStack(spacing: 10) {
+                    Text("挂载开发者镜像")
+                        .font(.title.weight(.bold))
+
+                    Text("iOS 16 的定位模拟服务在开发者磁盘镜像（DDI）里。点一次挂载即可——镜像约 8 MB，只下载一次，缓存在手机里。全程无需电脑。")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                DDIMountCard()
+                    .padding(18)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .locusGlass(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }
+            .padding(.horizontal, 24)
+
+            Spacer()
+
+            VStack(spacing: 12) {
+                primaryButton(ddiModel.phase == .mounted || ddiModel.phase == .succeeded ? "完成" : "稍后再挂载，先完成设置") {
+                    onFinished()
+                }
+                Text("以后也可以在 设置 → 配对 里随时挂载。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 28)
+        }
+        .onAppear {
+            if ddiModel.phase == .unknown {
+                ddiModel.refresh()
+            }
+        }
+    }
+
     // MARK: - LocalDevVPN
 
     private var vpnPage: some View {
@@ -456,10 +521,15 @@ enum SetupGate {
         UserDefaults.standard.set(false, forKey: inProgressKey)
     }
 
-    /// Already paired *during* this walkthrough → LocalDevVPN page.
+    /// Already paired *during* this walkthrough → the page after pairing
+    /// (DDI on iOS 16-, LocalDevVPN on iOS 17+).
     /// Fresh install → welcome. Already-paired upgrades are handled in `LocusApp`.
-    static func initialStep(hasPairingFile: Bool) -> SetupFlowView.Step {
-        if hasPairingFile, isInProgress { return .vpn }
+    static func initialStep(hasPairingFile: Bool, hasLockdownPairing: Bool) -> SetupFlowView.Step {
+        if #available(iOS 17.0, *) {
+            if hasPairingFile, isInProgress { return .vpn }
+            return .welcome
+        }
+        if hasLockdownPairing, isInProgress { return .ddi }
         return .welcome
     }
 }

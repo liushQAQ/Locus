@@ -33,9 +33,9 @@ enum LocationEngineError: LocalizedError {
         case .lockdownPairingRead:
             return "无法读取 lockdown 配对记录，请重新配对或重新导入。"
         case .lockdownConnect:
-            return "连不上 lockdownd 定位服务。请检查：1) 开发者磁盘镜像已挂载（手机每次重启后，用电脑跑一次 pymobiledevice3 developer ddi mount）；2) 配对记录仍有效（必要时重新导入）；3) 若改过隧道 IP，请恢复默认。"
+            return "连不上 lockdownd 定位服务。请检查：1) 开发者镜像已挂载（设置 → 配对 → 点“挂载开发者镜像”，手机重启后需重新挂载一次）；2) 配对记录仍有效（必要时重新本机配对）；3) 若改过隧道 IP，请恢复默认。"
         case .lockdownSet:
-            return "lockdown 位置模拟失败。请确认开发者磁盘镜像已挂载（pymobiledevice3 developer ddi mount）且配对记录有效。"
+            return "lockdown 位置模拟失败。请确认开发者镜像已挂载（设置 → 配对 → 挂载开发者镜像）且配对记录有效。"
         }
     }
 
