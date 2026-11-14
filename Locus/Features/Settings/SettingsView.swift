@@ -66,8 +66,8 @@ struct SettingsView: View {
                     Text("开发者配对")
                 } footer: {
                     Text(supportsOnDevicePairing
-                         ? "On iOS 27, use Pair on this iPhone — no computer. Locus advertises a pairable host; confirm the 6-digit code under Settings › Privacy & Security › Developer Mode › Pair with Host. On older iOS, import an RPPairing file from idevice_pair (not a SideStore lockdown .mobiledevicepairing). LiveContainer: enable Fix File Picker on Locus, or use Paste / Share → LiveContainer → Locus."
-                         : "Import an RPPairing file from idevice_pair (not a SideStore lockdown .mobiledevicepairing). If the file picker fails (common in LiveContainer), enable Fix File Picker on the app, share the file into LiveContainer → Locus, or copy the plist and use Paste.")
+                         ? "iOS 27 可用「在本机配对」，无需电脑：Locus 会广播一个可配对主机，到 设置 › 隐私与安全性 › 开发者模式 › 与主机配对 里确认 6 位配对码。更早的系统请导入 idevice_pair 生成的 RPPairing 文件（不是 SideStore 的 lockdown .mobiledevicepairing）。LiveContainer：先开启 Locus 的「修复文件选择器」，或用 粘贴 / 分享 → LiveContainer → Locus。"
+                         : "请导入 idevice_pair 生成的 RPPairing 文件（不是 SideStore 的 lockdown .mobiledevicepairing）。若文件选择器打不开（LiveContainer 常见），开启本 App 的「修复文件选择器」，或把文件分享进 LiveContainer → Locus，也可以复制 plist 内容后用「粘贴」。")
                 }
 
                 if usesLockdownEngine {
@@ -89,8 +89,8 @@ struct SettingsView: View {
                         .onSubmit {
                             TunnelConfig.setTargetIP(tunnelIP)
                         }
-                    LabeledContent("Status") {
-                        Text(LocalDevVPN.isConnected ? "Connected" : "Not connected")
+                    LabeledContent("状态") {
+                        Text(LocalDevVPN.isConnected ? "已连接" : "未连接")
                             .foregroundStyle(LocalDevVPN.isConnected ? LocusTheme.statusGood : LocusTheme.statusWarn)
                     }
                     Button("保存隧道 IP") {
@@ -104,25 +104,25 @@ struct SettingsView: View {
                         }
                     } label: {
                         Label(
-                            localDevVPNInstalled ? "Open LocalDevVPN" : "Get LocalDevVPN (App Store)",
+                            localDevVPNInstalled ? "打开 LocalDevVPN" : "获取 LocalDevVPN（App Store）",
                             systemImage: localDevVPNInstalled ? "lock.shield.fill" : "arrow.down.app.fill"
                         )
                     }
                 } header: {
                     Text("隧道")
                 } footer: {
-                    Text("传送前先连接 LocalDevVPN，默认隧道 IP 为 10.7.0.1。首次虚拟请在 Wi-Fi 下启动，之后蜂窝网络也能继续。")
+                    Text("iOS 17+：传送前先连接 LocalDevVPN（默认隧道 IP 10.7.0.1），首次虚拟请在 Wi-Fi 下启动，之后蜂窝网络也能继续。\niOS 16 及以下：无需 LocalDevVPN，隧道 IP 保持默认即可——App 自动改走本机 127.0.0.1 直连 lockdownd。")
                 }
 
-                Section("Privacy") {
+                Section("隐私") {
                     Text("完全本地运行。收藏与历史仅存于本机。无统计埋点、无账号、不上传任何数据。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
-                Section("About") {
-                    LabeledContent("Version", value: appVersion)
-                    LabeledContent("Engine", value: "idevice DVT location simulation")
+                Section("关于") {
+                    LabeledContent("版本", value: appVersion)
+                    LabeledContent("引擎", value: "idevice 位置模拟（iOS 16 lockdown / iOS 17 RemotePairing 双路径）")
                     Text("Locus 免费开源（MIT）。位置注入使用 MIT 许可的 idevice FFI 库。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -197,7 +197,7 @@ struct PlacesView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Favorites") {
+                Section("收藏") {
                     if session.favorites.isEmpty {
                         Text("在地图上给落点加星即可收藏。")
                             .foregroundStyle(.secondary)

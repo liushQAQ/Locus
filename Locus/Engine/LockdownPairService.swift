@@ -18,7 +18,7 @@ enum LockdownPairService {
         var errorDescription: String? {
             switch self {
             case .tunnelUnreachable:
-                return "连不上 lockdownd。请先连接 LocalDevVPN（隧道 IP 10.7.0.1）。"
+                return "连不上 lockdownd。iOS 16 及以下保持隧道 IP 默认即可（App 自动走 127.0.0.1）；iOS 17+ 请先连接 LocalDevVPN。"
             case .lockdown(let detail):
                 return detail
             case .noRecord:

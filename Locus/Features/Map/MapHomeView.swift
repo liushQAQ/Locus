@@ -484,7 +484,7 @@ private struct ModernMapView: View {
                     }
                 }
                 if let sim = session.simulated {
-                    Annotation("Spoof", coordinate: sim) {
+                    Annotation("模拟位置", coordinate: sim) {
                         ZStack {
                             Circle().fill(LocusTheme.accent.opacity(0.25)).frame(width: 44, height: 44)
                             Circle().fill(LocusTheme.accent).frame(width: 14, height: 14)

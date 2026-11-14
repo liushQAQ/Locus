@@ -182,9 +182,9 @@ enum PairingImportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .emptyClipboard:
-            return "Clipboard is empty. Copy the pairing plist text (or the file), then try Paste again."
+            return "剪贴板是空的。请先复制配对 plist 的文本（或整个文件内容），再点「粘贴」。"
         case .invalidContents:
-            return "That doesn’t look like a pairing plist. Copy the full pairing file contents and try again."
+            return "这看起来不是配对 plist 文件。请复制完整的配对文件内容后重试。"
         }
     }
 }

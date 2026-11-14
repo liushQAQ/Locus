@@ -175,8 +175,8 @@ struct PairOnDeviceView: View {
                 Text("配对成功")
                     .font(.title3.weight(.bold))
                 Text(mode == .embedded
-                     ? "Next we’ll set up LocalDevVPN."
-                     : "RPPairing file saved. Connect LocalDevVPN, then teleport.")
+                     ? "接下来去设置 LocalDevVPN。"
+                     : "RPPairing 文件已保存。连接 LocalDevVPN 后即可开始虚拟位置。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

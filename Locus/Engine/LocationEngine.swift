@@ -20,7 +20,7 @@ enum LocationEngineError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidIP: return "隧道 IP 无效。请检查 设置 → 隧道 IP（一般为 10.7.0.1）。"
+        case .invalidIP: return "隧道 IP 无效。iOS 16 及以下保持默认即可（App 自动走 127.0.0.1）；iOS 17+ 一般填 10.7.0.1。"
         case .pairingRead: return "无法读取 RPPairing 文件。请用 idevice_pair 以 RPPairing 模式生成。"
         case .tunnelCreate: return "无法打开开发者隧道。请确认 LocalDevVPN 已在 Wi-Fi 下连接。"
         case .remoteServer: return "隧道已连上，但 RemoteXPC 握手失败。"
@@ -33,7 +33,7 @@ enum LocationEngineError: LocalizedError {
         case .lockdownPairingRead:
             return "无法读取 lockdown 配对记录，请重新配对或重新导入。"
         case .lockdownConnect:
-            return "连不上 lockdownd 定位服务。请检查：1) LocalDevVPN 已连接；2) 开发者磁盘镜像已挂载（手机每次重启后用电脑跑一次 pymobiledevice3 developer ddi mount）；3) 配对记录仍有效。"
+            return "连不上 lockdownd 定位服务。请检查：1) 开发者磁盘镜像已挂载（手机每次重启后，用电脑跑一次 pymobiledevice3 developer ddi mount）；2) 配对记录仍有效（必要时重新导入）；3) 若改过隧道 IP，请恢复默认。"
         case .lockdownSet:
             return "lockdown 位置模拟失败。请确认开发者磁盘镜像已挂载（pymobiledevice3 developer ddi mount）且配对记录有效。"
         }
@@ -250,43 +250,59 @@ enum LocationEngine {
             return lockdownPairingMissingCode
         }
 
-        var address = sockaddr_in()
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = in_port_t(62078).bigEndian // lockdownd
-        let inetResult = deviceIP.withCString { inet_pton(AF_INET, $0, &address.sin_addr) }
-        guard inetResult == 1 else { return invalidIP }
+        // 选路：LocalDevVPN 的默认 10.7.0.1 只存在于它的 utun 隧道里，而本机
+        // lockdownd 在回环上可达。iOS16 路径先试 127.0.0.1（无需任何 VPN），
+        // 失败再退回用户配置的 IP；自定义 IP 时行为不变。
+        let candidates = deviceIP == "10.7.0.1" ? ["127.0.0.1", deviceIP] : [deviceIP]
 
-        var pairingFile: OpaquePointer?
-        if let pairingError = lockdownPairingPath.withCString({ idevice_pairing_file_read($0, &pairingFile) }) {
-            idevice_error_free(pairingError)
-            return lockdownPairingReadCode
-        }
-        guard let pairingFile else { return lockdownPairingReadCode }
+        for candidate in candidates {
+            var address = sockaddr_in()
+            address.sin_family = sa_family_t(AF_INET)
+            address.sin_port = in_port_t(62078).bigEndian // lockdownd
+            let inetResult = candidate.withCString { inet_pton(AF_INET, $0, &address.sin_addr) }
+            guard inetResult == 1 else { return invalidIP }
 
-        // idevice_tcp_provider_new consumes the pairing file on success (and the
-        // docs make no promise about failure, so never free it here).
-        let providerError = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                idevice_tcp_provider_new(
-                    $0,
-                    pairingFile,
-                    "LocusLockdown",
-                    &lockdownProvider
-                )
+            var pairingFile: OpaquePointer?
+            if let pairingError = lockdownPairingPath.withCString({ idevice_pairing_file_read($0, &pairingFile) }) {
+                idevice_error_free(pairingError)
+                return lockdownPairingReadCode
             }
-        }
-        if let providerError {
-            idevice_error_free(providerError)
-            return lockdownConnectCode
-        }
-        guard let lockdownProvider else { return lockdownConnectCode }
+            guard let pairingFile else { return lockdownPairingReadCode }
 
-        if let connectError = lockdown_location_simulation_connect(lockdownProvider, &lockdownSimulation) {
-            idevice_error_free(connectError)
-            idevice_provider_free(lockdownProvider)
-            self.lockdownProvider = nil
-            return lockdownConnectCode
+            // idevice_tcp_provider_new consumes the pairing file on success (and the
+            // docs make no promise about failure, so never free it here).
+            var provider: OpaquePointer?
+            let providerError = withUnsafePointer(to: &address) { pointer in
+                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    idevice_tcp_provider_new(
+                        $0,
+                        pairingFile,
+                        "LocusLockdown",
+                        &provider
+                    )
+                }
+            }
+            if let providerError {
+                idevice_error_free(providerError)
+                continue
+            }
+            guard let provider else { continue }
+
+            var simulation: OpaquePointer?
+            if let connectError = lockdown_location_simulation_connect(provider, &simulation) {
+                idevice_error_free(connectError)
+                idevice_provider_free(provider)
+                continue
+            }
+            guard let simulation else {
+                idevice_provider_free(provider)
+                continue
+            }
+
+            lockdownProvider = provider
+            lockdownSimulation = simulation
         }
+
         guard let lockdownSimulation else { return lockdownConnectCode }
 
         let lat = String(format: "%.7f", latitude)
