@@ -39,12 +39,12 @@ struct SetupFlowView: View {
 
     private var pairingPageIntro: String {
         if supportsOnDevicePairing {
-            return "Locus needs a one-time pairing so it can set your location. You’ll confirm a short code in Settings."
+            return "Locus 需要一次性配对才能修改你的位置。之后需要在设置里确认一个短验证码。"
         }
         if usesLockdownEngine {
-            return "Locus needs a one-time lockdown pairing so it can set your location on this device. Tap Trust when the popup appears."
+            return "Locus 需要一次性的 lockdown 配对，才能在这台手机上设置位置。弹窗出现时请点“信任”。"
         }
-        return "Import a pairing file from your computer — Locus uses it to set your location securely on this device."
+        return "从电脑导入一个配对文件——Locus 用它在这台手机上安全地设置位置。"
     }
 
     var body: some View {
@@ -186,7 +186,7 @@ struct SetupFlowView: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Step \(step.rawValue + 1) of \(Step.allCases.count)")
+        .accessibilityLabel("第 \(step.rawValue + 1) 步 / 共 \(Step.allCases.count) 步")
     }
 
     // MARK: - Welcome
@@ -217,7 +217,7 @@ struct SetupFlowView: View {
                         .font(.system(size: 48, weight: .bold, design: .rounded))
                         .tracking(-0.5)
 
-                    Text("Teleport your location.\nNo computer required.")
+                    Text("虚拟你的位置\n无需电脑")
                         .font(.title3)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -231,11 +231,11 @@ struct SetupFlowView: View {
             Spacer()
 
             VStack(spacing: 14) {
-                Text("A short setup — about two minutes.")
+                Text("简单设置，约两分钟。")
                     .font(.subheadline)
                     .foregroundStyle(.tertiary)
 
-                primaryButton("Get started") {
+                primaryButton("开始使用") {
                     SetupGate.markInProgress()
                     withAnimation { step = .pairing }
                 }
@@ -251,7 +251,7 @@ struct SetupFlowView: View {
     private var pairingPage: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Connect this iPhone")
+                Text("连接这台 iPhone")
                     .font(.title.weight(.bold))
                 Text(pairingPageIntro)
                     .font(.subheadline)
@@ -277,7 +277,7 @@ struct SetupFlowView: View {
                     .padding(.horizontal, 24)
                 Spacer()
                 VStack(spacing: 12) {
-                    primaryButton("Import pairing file") {
+                    primaryButton("导入配对文件") {
                         showImporter = true
                     }
                     Button {
@@ -288,7 +288,7 @@ struct SetupFlowView: View {
                             session.lastError = error.localizedDescription
                         }
                     } label: {
-                        Text("Paste from clipboard")
+                        Text("从剪贴板粘贴")
                             .font(.headline)
                             .foregroundStyle(.primary)
                             .frame(maxWidth: .infinity)
@@ -306,9 +306,9 @@ struct SetupFlowView: View {
 
     private var importPairingCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            stepRow(1, "On a Mac, run idevice_pair and create an RPPairing file.")
-            stepRow(2, "AirDrop / Share into Locus, or copy the plist text.")
-            stepRow(3, "Tap Import, or Paste from clipboard if the picker doesn’t work (LiveContainer).")
+            stepRow(1, "在 Mac 上运行 idevice_pair 生成 RPPairing 配对文件。")
+            stepRow(2, "隔空投送/分享到 Locus，或复制 plist 文本。")
+            stepRow(3, "点“导入”；若文件选择器打不开（LiveContainer 环境）就用“从剪贴板粘贴”。")
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -341,12 +341,12 @@ struct SetupFlowView: View {
                     .foregroundStyle(LocusTheme.accent)
 
                 VStack(spacing: 10) {
-                    Text(localDevVPNInstalled ? "Connect LocalDevVPN" : "One more app")
+                    Text(localDevVPNInstalled ? "Connect LocalDevVPN" : "还差一个 App")
                         .font(.title.weight(.bold))
 
                     Text(localDevVPNInstalled
-                         ? "LocalDevVPN is installed. Open it to turn on the private tunnel Locus needs, then come back here."
-                         : "LocalDevVPN creates a private tunnel Locus uses to talk to your phone’s location system. Install it, turn it on, then you’re ready to teleport.")
+                         ? "LocalDevVPN 已安装。打开它开启 Locus 需要的私有隧道，然后回到这里。"
+                         : "LocalDevVPN 会建立一条私有隧道，Locus 通过它与手机定位系统通信。装好并开启后即可开始虚拟位置。")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -355,13 +355,13 @@ struct SetupFlowView: View {
 
                 VStack(alignment: .leading, spacing: 12) {
                     if localDevVPNInstalled {
-                        tipRow(systemImage: "checkmark.circle.fill", title: "Installed", detail: "LocalDevVPN is on this iPhone.")
-                        tipRow(systemImage: "power.circle.fill", title: "Connect", detail: "Tap below to open it and start the tunnel. You’ll bounce back to Locus.")
+                        tipRow(systemImage: "checkmark.circle.fill", title: "已安装", detail: "这台 iPhone 上已有 LocalDevVPN。")
+                        tipRow(systemImage: "power.circle.fill", title: "连接", detail: "点下面打开它并启动隧道，完成后会自动回到 Locus。")
                     } else {
-                        tipRow(systemImage: "arrow.down.app.fill", title: "Install", detail: "Get LocalDevVPN from the App Store.")
-                        tipRow(systemImage: "power.circle.fill", title: "Connect", detail: "Open it and turn the VPN on. Leave the default IP alone.")
+                        tipRow(systemImage: "arrow.down.app.fill", title: "安装", detail: "从 App Store 获取 LocalDevVPN。")
+                        tipRow(systemImage: "power.circle.fill", title: "连接", detail: "打开它并开启 VPN，默认 IP 不要改。")
                     }
-                    tipRow(systemImage: "wifi", title: "First teleport on Wi‑Fi", detail: "Start your first teleport while on Wi‑Fi. After that, it can keep working on cellular.")
+                    tipRow(systemImage: "wifi", title: "首次虚拟请在 Wi-Fi 下进行", detail: "第一次虚拟位置请在 Wi-Fi 环境下启动，之后切到蜂窝网络也能继续生效。")
                 }
                 .padding(18)
                 .locusGlass(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -380,7 +380,7 @@ struct SetupFlowView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: localDevVPNInstalled ? "lock.shield.fill" : "apple.logo")
-                        Text(localDevVPNInstalled ? "Open LocalDevVPN" : "Get LocalDevVPN")
+                        Text(localDevVPNInstalled ? "打开 LocalDevVPN" : "获取 LocalDevVPN")
                             .fontWeight(.semibold)
                     }
                     .frame(maxWidth: .infinity)
@@ -391,7 +391,7 @@ struct SetupFlowView: View {
                 }
                 .buttonStyle(.plain)
 
-                primaryButton("I’ve connected it — continue") {
+                primaryButton("已连接，继续") {
                     onFinished()
                 }
             }
