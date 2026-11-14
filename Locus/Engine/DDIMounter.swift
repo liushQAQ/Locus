@@ -77,7 +77,7 @@ enum DDIMounter {
                 }
             }
             return err == nil
-        } ?? nil
+        }
     }
 
     // MARK: - Mount
@@ -111,13 +111,17 @@ enum DDIMounter {
         imageURL: URL,
         signatureURL: URL
     ) -> Result<Void, MountError> {
-        // Already mounted → nothing to do.
+        // Already mounted → nothing to do. (LookupImage returns the signature
+        // of a mounted/known image; an error means "not mounted" — fall through
+        // to upload+mount, the device reports "already mounted" itself if so.)
         var signature: UnsafeMutablePointer<UInt8>?
         var signatureLen: UInt = 0
-        if let lookupErr = imageType.withCString {
+        let lookupResult = imageType.withCString {
             image_mounter_lookup_image(mounter, $0, &signature, &signatureLen)
-        } {
+        }
+        if let lookupErr = lookupResult {
             idevice_error_free(lookupErr)
+        } else {
             if let signature {
                 idevice_data_free(signature, UInt(signatureLen))
             }
@@ -157,9 +161,9 @@ enum DDIMounter {
                         mounter,
                         typePtr,
                         imageBytes.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                        UInt(image.count),
+                        image.count,
                         signatureBytes.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                        UInt(signatureData.count)
+                        signatureData.count
                     )
                 }
             }
@@ -180,7 +184,7 @@ enum DDIMounter {
                     mounter,
                     typePtr,
                     signatureBytes.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                    UInt(signatureData.count),
+                    signatureData.count,
                     nil,
                     0,
                     nil
@@ -279,7 +283,7 @@ enum DDIMounter {
 
     /// Opens the image mounter over the best available lockdown transport and
     /// runs `body`, freeing both the mounter and its provider afterwards.
-    private static func withMounter(_ body: (OpaquePointer) -> Bool?) -> Bool? {
+    private static func withMounter<T>(_ body: (OpaquePointer) -> T?) -> T? {
         // Preferred: explicit pairing file over loopback TCP — deterministic,
         // the stored record is exactly what the TLS handshake uses.
         if let provider = LoopbackTransport.makeProvider() {
@@ -326,10 +330,11 @@ enum DDIMounter {
     /// `LockdownPairService` saves it right after pairing).
     private static func usbmuxdProvider() -> OpaquePointer? {
         var connection: OpaquePointer?
-        if let err = "/var/run/usbmuxd".withCString {
+        let connectError = "/var/run/usbmuxd".withCString {
             idevice_usbmuxd_new_unix_socket_connection($0, 3, &connection)
-        } {
-            idevice_error_free(err)
+        }
+        if let connectError {
+            idevice_error_free(connectError)
             return nil
         }
         guard let connection else { return nil }
@@ -347,17 +352,18 @@ enum DDIMounter {
             return nil
         }
         let deviceID = idevice_usbmuxd_device_get_device_id(first)
-        let udid = idevice_usbmuxd_device_get_udid(first).map {
-            defer { idevice_string_free($0) }
-            return String(cString: $0)
+        let udid = idevice_usbmuxd_device_get_udid(first).map { ptr -> String in
+            defer { idevice_string_free(ptr) }
+            return String(cString: ptr)
         } ?? ""
         idevice_usbmuxd_device_list_free(list, count)
 
         var addr: OpaquePointer?
-        if let err = "/var/run/usbmuxd".withCString {
+        let addrError = "/var/run/usbmuxd".withCString {
             idevice_usbmuxd_unix_addr_new($0, &addr)
-        } {
-            idevice_error_free(err)
+        }
+        if let addrError {
+            idevice_error_free(addrError)
             return nil
         }
         guard let addr else { return nil }
@@ -402,9 +408,9 @@ enum LoopbackTransport {
 
         var provider: OpaquePointer?
         let err = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
                 "LocusDDI".withCString { label in
-                    idevice_tcp_provider_new($0, pairingFile, label, &provider)
+                    idevice_tcp_provider_new(sockPtr, pairingFile, label, &provider)
                 }
             }
         }

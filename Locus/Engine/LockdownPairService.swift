@@ -85,9 +85,9 @@ enum LockdownPairService {
             return .failure(.tunnelUnreachable("usbmuxd 设备列表为空"))
         }
         let deviceID = idevice_usbmuxd_device_get_device_id(first)
-        let udid = idevice_usbmuxd_device_get_udid(first).map {
-            defer { idevice_string_free($0) }
-            return String(cString: $0)
+        let udid = idevice_usbmuxd_device_get_udid(first).map { ptr -> String in
+            defer { idevice_string_free(ptr) }
+            return String(cString: ptr)
         } ?? ""
         idevice_usbmuxd_device_list_free(list, count)
 

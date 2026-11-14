@@ -77,6 +77,21 @@ final class DDIMountModel: ObservableObject {
         phase == .mounted || phase == .succeeded
     }
 
+    /// `.failed` carries an associated value, so it can't be compared with
+    /// `==` — pattern-match instead.
+    var isFailed: Bool {
+        if case .failed = phase { return true }
+        return false
+    }
+
+    /// Phases from which the mount button may (re)start the flow.
+    var canTriggerMount: Bool {
+        switch phase {
+        case .unknown, .notMounted, .unreachable, .failed: return true
+        default: return false
+        }
+    }
+
     var statusIcon: String {
         if statusIsGood { return "checkmark.seal.fill" }
         return "exclamationmark.triangle.fill"
@@ -115,9 +130,9 @@ struct DDIMountCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if model.phase == .unknown || model.phase == .notMounted || model.phase == .unreachable || model.phase == .failed {
+            if model.canTriggerMount {
                 Button {
-                    if model.phase == .unreachable || (model.phase == .failed && !pairing.hasLockdownPairing) {
+                    if model.phase == .unreachable || (model.isFailed && !pairing.hasLockdownPairing) {
                         // No pairing yet — the pairing button above is the fix.
                     } else {
                         model.mount()
